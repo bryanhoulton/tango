@@ -2,8 +2,8 @@ import { Request, Response } from "express";
 
 import { JSONObject } from "../response/json";
 import { TangoServer } from "../server";
+import { TangoResolver } from "../view";
 import { DispatchableViewSet } from "../viewset";
-import { TangoResolver } from "../viewset/view";
 
 export type TangoRoute = {
   [path: string]: TangoRoute | TangoResolver;
@@ -97,7 +97,13 @@ export class TangoRouter {
             server.app.delete(rootPath, callback);
             break;
           default:
-            throw new Error(`Unsupported method: ${path}`);
+            // Bind all methods to the route.
+            server.app.get(rootPath + path, callback);
+            server.app.post(rootPath + path, callback);
+            server.app.put(rootPath + path, callback);
+            server.app.patch(rootPath + path, callback);
+            server.app.delete(rootPath + path, callback);
+            break;
         }
       } else {
         // Recursively bind the route.

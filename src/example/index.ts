@@ -3,7 +3,7 @@ import { RequestLoggingMiddleware } from "../middleware/logging";
 import { TangoRouter } from "../router";
 import { TangoServer } from "../server";
 import { AppDataSource } from "./data-source";
-import { BlogViewset } from "./viewsets";
+import { BlogViewset, healthCheck } from "./viewsets";
 
 const server = new TangoServer({
   datasource: AppDataSource,
@@ -14,6 +14,9 @@ const server = new TangoServer({
   },
   routes: {
     blog: TangoRouter.convertViewSet(new BlogViewset()),
+    "health-check": {
+      GET: healthCheck,
+    },
   },
 });
 

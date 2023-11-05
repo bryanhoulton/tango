@@ -3,7 +3,7 @@ import { EntityTarget, ObjectLiteral } from "typeorm";
 
 import { AppDataSource } from "../example/data-source";
 import { Permission } from "../permissions";
-import { TangoResponse } from "./view";
+import { TangoResponse } from "../view";
 
 export interface ViewSet {
   list(req: Request): Promise<TangoResponse>;
@@ -87,7 +87,7 @@ export abstract class BaseViewSet<T extends EntityTarget<ObjectLiteral>>
   }
 
   async create(req: Request): Promise<TangoResponse> {
-    const result = await AppDataSource.manager.insert(this.entity, req.body);
+    const result = await AppDataSource.manager.create(this.entity, req.body);
     return {
       status: 201,
       body: result,
@@ -100,27 +100,60 @@ export abstract class BaseViewSet<T extends EntityTarget<ObjectLiteral>>
       throw new Error("No id provided.");
     }
 
+    const result = await AppDataSource.manager.findOne(this.entity, {
+      where: { id: id },
+    });
+
+    if (result === null) {
+      return {
+        status: 404,
+      };
+    }
+
     return {
       status: 200,
-      body: {},
+      body: result,
     };
   }
 
   async update(req: Request): Promise<TangoResponse> {
+    const id = req.params.id;
+    if (id === undefined) {
+      throw new Error("No id provided.");
+    }
+
+    const result = await AppDataSource.manager.update(
+      this.entity,
+      { id: id },
+      req.body
+    );
+
+    const newResult = await AppDataSource.manager.findOne(this.entity, {
+      where: { id: id },
+    });
+
     return {
-      status: 501,
+      status: 201,
+      body: newResult,
     };
   }
 
   async partialUpdate(req: Request): Promise<TangoResponse> {
-    return {
-      status: 501,
-    };
+    return this.update(req);
   }
 
   async delete(req: Request): Promise<TangoResponse> {
+    const id = req.params.id;
+    if (id === undefined) {
+      throw new Error("No id provided.");
+    }
+
+    const result = await AppDataSource.manager.delete(this.entity, {
+      id: id,
+    });
+
     return {
-      status: 501,
+      status: 204,
     };
   }
 }

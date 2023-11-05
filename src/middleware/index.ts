@@ -1,7 +1,7 @@
 import { Request } from "express";
 
 import { TangoServer } from "../server";
-import { TangoResponse } from "../viewset/view";
+import { TangoResponse } from "../view";
 
 export class Middleware {
   server: TangoServer;

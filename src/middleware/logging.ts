@@ -1,6 +1,6 @@
 import { Request } from "express";
 
-import { TangoResponse } from "../viewset/view";
+import { TangoResponse } from "../view";
 import { Middleware } from "./";
 
 export class RequestLoggingMiddleware extends Middleware {
