@@ -7,10 +7,17 @@
   "author": "Bryan Houlton <brhoulton@gmail.com>",
   "license": "MIT",
   "scripts": {
-    "build": "yarn tsc"
+    "build": "tsc",
+    "start": "node ./bin/index.js",
+    "dev": "ts-node ./src/index.ts",
+    "example": "nodemon ./src/example/index.ts"
   },
   "dependencies": {
+    "@types/express": "^4.17.20",
     "@types/node": "^20.8.10",
+    "express": "^4.18.2",
+    "nodemon": "^3.0.1",
+    "tslog": "^4.9.2",
     "typescript": "^5.2.2"
   },
   "devDependencies": {
