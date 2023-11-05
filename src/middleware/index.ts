@@ -1,7 +1,7 @@
-import { Request } from "express";
+import { Request } from 'express';
 
-import { TangoServer } from "../server";
-import { TangoResponse } from "../view";
+import { TangoServer } from '../server';
+import { TangoResponse } from '../view';
 
 export class Middleware {
   server: TangoServer;
@@ -22,3 +22,5 @@ export class Middleware {
     return { status, body };
   }
 }
+
+export * from "./logging";

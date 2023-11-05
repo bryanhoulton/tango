@@ -2,13 +2,14 @@
   "name": "@tango-ts/core",
   "version": "1.0.6",
   "description": "Open source Django alternative closely modeled after Django Rest Framework (DRF), but written and run in TypeScript.",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "repository": "https://github.com/bryanhoulton/tango.git",
   "author": "Bryan Houlton <brhoulton@gmail.com>",
   "license": "MIT",
   "scripts": {
     "build": "tsc",
-    "start": "node ./bin/index.js",
+    "start": "node ./dist/index.js",
     "dev": "ts-node ./src/index.ts",
     "example": "nodemon ./src/example/index.ts"
   },

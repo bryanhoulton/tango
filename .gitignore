@@ -4,3 +4,4 @@ bin
 build
 yarn.lock
 database.sqlite
+dist
