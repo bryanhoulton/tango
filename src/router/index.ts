@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 
+import { Model } from "../model";
 import { TangoServer } from "../server";
 import { ModelViewSet } from "../viewset";
 import { TangoResolver } from "../viewset/view";
@@ -15,17 +16,17 @@ export class TangoRouter {
     this.routes = routes;
   }
 
-  static convertViewset(viewset: ModelViewSet): TangoRoute {
+  static convertViewset(viewset: ModelViewSet<Model>): TangoRoute {
     return {
       "/": {
-        GET: (req) => viewset.list(req),
-        POST: (req) => viewset.create(req),
+        GET: viewset.retrieve.bind(viewset),
+        POST: viewset.create.bind(viewset),
       },
       "/:id": {
-        GET: (req) => viewset.retrieve(req),
-        PUT: (req) => viewset.update(req),
-        PATCH: (req) => viewset.partialUpdate(req),
-        DELETE: (req) => viewset.delete(req),
+        GET: viewset.retrieve.bind(viewset),
+        PUT: viewset.update.bind(viewset),
+        PATCH: viewset.partialUpdate.bind(viewset),
+        DELETE: viewset.delete.bind(viewset),
       },
     };
   }
@@ -53,8 +54,8 @@ export class TangoRouter {
         // Define the callback function for the route.
         // TODO: Add middleware.
         const callback = (req: Request, res: Response) => {
-          const result = route(req);
-          res.send(result);
+          const { status, body } = route(req);
+          res.status(status).send(body);
         };
 
         // Bind the route to the server.

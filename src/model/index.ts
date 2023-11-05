@@ -1,6 +1,3 @@
-export class Model {
-  static objects = {
-    filter: (arg: any) => true,
-    all: () => [],
-  };
+export interface Model {
+  _modelName: string;
 }

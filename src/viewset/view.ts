@@ -1,4 +1,11 @@
 import { Request } from "express";
 
 export type TangoMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
-export type TangoResolver = (req: Request) => any;
+export type TangoResponse = {
+  status: number;
+  body?: any;
+};
+export type TangoResolver = (
+  req: Request,
+  pathVariables?: Record<string, string>
+) => TangoResponse;
