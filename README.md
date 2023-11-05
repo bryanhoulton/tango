@@ -36,3 +36,4 @@ Tango is nowhere near production ready. Use at your own risk. There is no guaran
 - [ ] Filtering viewsets
 - [ ] Pagination
 - [ ] Throttling
+- [ ] tRPC or OpenAPI
