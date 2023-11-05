@@ -4,9 +4,7 @@ Tango is an open source, batteries-included backend framework closely modeled af
 
 ## Getting Started
 
-You can check out the example project in `src/example/` to see how Tango works. I haven't listed this package on NPM yet, so you'll have to clone the repo and run `yarn install` to get started.
-
-After installing, run `yarn example` to run the example app.
+You can check out the example project [here](https://github.com/bryanhoulton/tango-example) to see how it works.
 
 ## Features
 
