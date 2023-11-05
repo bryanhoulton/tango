@@ -1,7 +1,8 @@
 import { Authentication } from "../authentication";
-import { Permission } from "../permissions";
+import { Middleware } from "../middleware";
 
 export type TangoServerGlobal = {
+  minLogLevel?: number;
   authentication: Authentication[];
-  permissions: Permission[];
+  middleware?: (typeof Middleware)[];
 };

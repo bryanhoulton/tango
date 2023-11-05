@@ -1,39 +1,22 @@
 import { TokenAuthentication } from "../authentication";
-import { Model } from "../model";
-import { CharField } from "../model/fields/char";
-import { ModelManager } from "../model/manager";
-import { ModelSerializer } from "../model/serializer";
-import { AllowAny } from "../permissions";
+import { RequestLoggingMiddleware } from "../middleware/logging";
 import { TangoRouter } from "../router";
 import { TangoServer } from "../server";
-import { ModelViewSet } from "../viewset";
+import { AppDataSource } from "./data-source";
+import { BlogViewset } from "./viewsets";
 
-// example/models.ts -- I could be convinced to use an existing ORM for this.
-class Blog implements Model {
-  _modelName = "Blog";
-  id = new CharField();
-}
-
-class BlogViewSet extends ModelViewSet<Blog> {
-  constructor() {
-    super({
-      modelManager: new ModelManager<Blog>(),
-      serializer: new ModelSerializer<Blog>(),
-    });
-  }
-}
-
-// example/index.ts
 const server = new TangoServer({
+  datasource: AppDataSource,
   global: {
-    permissions: [new AllowAny()],
-    authentication: [new TokenAuthentication()],
+    minLogLevel: 3,
+    authentication: [TokenAuthentication],
+    middleware: [RequestLoggingMiddleware],
   },
   routes: {
-    blog: TangoRouter.convertViewset(new BlogViewSet()),
+    blog: TangoRouter.convertViewSet(new BlogViewset()),
   },
 });
 
 server.listen({
-  port: 8080,
+  port: 8000,
 });

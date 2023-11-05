@@ -1,8 +1,8 @@
 import { Request, Response } from "express";
 
-import { Model } from "../model";
+import { JSONObject } from "../response/json";
 import { TangoServer } from "../server";
-import { ModelViewSet } from "../viewset";
+import { DispatchableViewSet } from "../viewset";
 import { TangoResolver } from "../viewset/view";
 
 export type TangoRoute = {
@@ -16,17 +16,17 @@ export class TangoRouter {
     this.routes = routes;
   }
 
-  static convertViewset(viewset: ModelViewSet<Model>): TangoRoute {
+  static convertViewSet(viewset: DispatchableViewSet): TangoRoute {
     return {
       "/": {
-        GET: viewset.retrieve.bind(viewset),
-        POST: viewset.create.bind(viewset),
+        GET: (req) => viewset.dispatch(req, "list"),
+        POST: (req) => viewset.dispatch(req, "create"),
       },
       "/:id": {
-        GET: viewset.retrieve.bind(viewset),
-        PUT: viewset.update.bind(viewset),
-        PATCH: viewset.partialUpdate.bind(viewset),
-        DELETE: viewset.delete.bind(viewset),
+        GET: (req) => viewset.dispatch(req, "retrieve"),
+        PUT: (req) => viewset.dispatch(req, "update"),
+        PATCH: (req) => viewset.dispatch(req, "partialUpdate"),
+        DELETE: (req) => viewset.dispatch(req, "delete"),
       },
     };
   }
@@ -49,12 +49,33 @@ export class TangoRouter {
 
     for (const [path, route] of Object.entries(routes)) {
       if (typeof route === "function") {
-        server.logger.info(`Binding ${rootPath} - ${path}`);
+        server.logger.trace(`Binding ${rootPath} - ${path}`);
 
         // Define the callback function for the route.
-        // TODO: Add middleware.
-        const callback = (req: Request, res: Response) => {
-          const { status, body } = route(req);
+        const callback = async (req: Request, res: Response) => {
+          let status: number = 200;
+          let body: JSONObject = {};
+
+          // Pass through any pre-request middleware.
+          for (let middleware of server.singletonMiddlewares || []) {
+            const result = await middleware.before(req, status, body);
+            status = result.status;
+            body = result.body;
+          }
+
+          // Run through the viewset.
+          const result = await route(req);
+          status = result.status;
+          body = result.body;
+
+          // Pass through any post-request middleware.
+          for (let middleware of server.singletonMiddlewares || []) {
+            const result = await middleware.after(req, status, body);
+            status = result.status;
+            body = result.body;
+          }
+
+          // Send the response.
           res.status(status).send(body);
         };
 

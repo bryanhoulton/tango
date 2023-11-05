@@ -8,4 +8,4 @@ export type TangoResponse = {
 export type TangoResolver = (
   req: Request,
   pathVariables?: Record<string, string>
-) => TangoResponse;
+) => Promise<TangoResponse>;
