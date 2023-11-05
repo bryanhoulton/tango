@@ -1,6 +1,6 @@
 {
   "name": "@tango-ts/core",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Open source Django alternative closely modeled after Django Rest Framework (DRF), but written and run in TypeScript.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
