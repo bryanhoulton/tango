@@ -1,2 +1,5 @@
 yarn-error.log
 node_modules
+bin
+build
+yarn.lock

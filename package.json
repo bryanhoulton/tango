@@ -6,6 +6,9 @@
   "repository": "https://github.com/bryanhoulton/tango.git",
   "author": "Bryan Houlton <brhoulton@gmail.com>",
   "license": "MIT",
+  "scripts": {
+    "build": "yarn tsc"
+  },
   "dependencies": {
     "@types/node": "^20.8.10",
     "typescript": "^5.2.2"
