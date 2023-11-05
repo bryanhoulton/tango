@@ -9,8 +9,7 @@
   "license": "MIT",
   "scripts": {
     "build": "tsc",
-    "start": "node ./dist/index.js",
-    "dev": "ts-node ./src/index.ts",
+    "rebuild": "tsc --watch",
     "example": "nodemon ./src/example/index.ts"
   },
   "dependencies": {
