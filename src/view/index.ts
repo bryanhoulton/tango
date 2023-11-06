@@ -1,4 +1,6 @@
-import { Request } from "express";
+import { Request } from 'express';
+
+import { User } from '../authentication/user';
 
 export type TangoMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 export type TangoResponse<T = any> = {
@@ -6,4 +8,7 @@ export type TangoResponse<T = any> = {
   body?: T;
 };
 
-export type TangoResolver = (req: Request) => Promise<TangoResponse>;
+export type TangoResolver = (args: {
+  req: Request;
+  user: User | null;
+}) => Promise<TangoResponse>;

@@ -1,29 +1,41 @@
-import { Request } from "express";
-import { EntityTarget, ObjectLiteral } from "typeorm";
+import { Request } from 'express';
+import {
+  BaseEntity,
+  FindOptionsWhere,
+} from 'typeorm';
 
-import { AppDataSource } from "../example/data-source";
-import { Permission } from "../permissions";
-import { TangoResponse } from "../view";
+import { User } from '../authentication/user';
+import { AppDataSource } from '../example/data-source';
+import { Permission } from '../permissions';
+import { Serializer } from '../serializer';
+import {
+  TangoResolver,
+  TangoResponse,
+} from '../view';
 
 export interface ViewSet {
-  list(req: Request): Promise<TangoResponse>;
-  create(req: Request): Promise<TangoResponse>;
-  retrieve(req: Request): Promise<TangoResponse>;
-  update(req: Request): Promise<TangoResponse>;
-  partialUpdate(req: Request): Promise<TangoResponse>;
-  delete(req: Request): Promise<TangoResponse>;
+  list: TangoResolver;
+  create: TangoResolver;
+  retrieve: TangoResolver;
+  update: TangoResolver;
+  partialUpdate: TangoResolver;
+  delete: TangoResolver;
 }
 
 export interface Dispatchable {
-  dispatch(req: Request, method: keyof ViewSet): Promise<TangoResponse>;
+  dispatch(
+    args: Parameters<TangoResolver>,
+    method: keyof ViewSet
+  ): Promise<TangoResponse>;
 }
 
 export interface DispatchableViewSet extends ViewSet, Dispatchable {}
 
-export abstract class BaseViewSet<T extends EntityTarget<ObjectLiteral>>
+export abstract class BaseViewSet<T extends typeof BaseEntity>
   implements DispatchableViewSet
 {
   abstract entity: T;
+  abstract serializer: typeof Serializer<T>;
   permissions: Permission[] = [];
 
   /**
@@ -41,10 +53,10 @@ export abstract class BaseViewSet<T extends EntityTarget<ObjectLiteral>>
    * @param req
    * @returns true if the request is allowed, false otherwise.
    */
-  async hasPermission(req: Request): Promise<boolean> {
+  async hasPermission(req: Request, user: User | null): Promise<boolean> {
     const permissions = this.getPermissions(req);
     for (let permission of permissions) {
-      const allowed = await permission.hasPermission(req);
+      const allowed = await permission.hasPermission(req, user);
       if (!allowed) {
         return false;
       }
@@ -60,7 +72,10 @@ export abstract class BaseViewSet<T extends EntityTarget<ObjectLiteral>>
    * @param fn The method to dispatch to.
    * @returns
    */
-  async dispatch(req: Request, fn: keyof ViewSet): Promise<TangoResponse> {
+  async dispatch(
+    args: Parameters<TangoResolver>,
+    fn: keyof ViewSet
+  ): Promise<TangoResponse> {
     if (this[fn] === undefined) {
       return {
         status: 501,
@@ -68,40 +83,63 @@ export abstract class BaseViewSet<T extends EntityTarget<ObjectLiteral>>
     }
 
     // Check permissions.
-    const isAllowed = await this.hasPermission(req);
+    const { req, user } = args[0];
+    const isAllowed = await this.hasPermission(req, user);
     if (!isAllowed) {
       return {
         status: 403,
       };
     }
 
-    return this[fn](req);
+    return this[fn](...args);
   }
 
-  async list(req: Request): Promise<TangoResponse> {
-    const blogs = await AppDataSource.manager.find(this.entity);
+  // --------------------------------- Resolvers --------------------------------------
+  list: TangoResolver = async ({}) => {
+    const entities = await AppDataSource.manager.find<T>(this.entity);
+    const serializer = new this.serializer();
+
+    // Serialize the entities.
+    const serializedEntities = await Promise.all(
+      entities.map(async (entity) => {
+        return await serializer.serialize(entity);
+      })
+    );
+
     return {
       status: 200,
-      body: blogs,
+      body: serializedEntities,
     };
-  }
+  };
 
-  async create(req: Request): Promise<TangoResponse> {
-    const result = await AppDataSource.manager.create(this.entity, req.body);
+  create: TangoResolver = async ({ req }) => {
+    // Deserialize the request body.
+    const serializer = new this.serializer();
+    const { value: instance, error } = await serializer.deserialize(req.body);
+    if (error != undefined) {
+      return {
+        status: 400,
+        body: error,
+      };
+    }
+
+    // Save the instance.
+    const result = await AppDataSource.manager.insert(this.entity, instance);
     return {
       status: 201,
-      body: result,
+      body: serializer.serialize(instance),
     };
-  }
+  };
 
-  async retrieve(req: Request): Promise<TangoResponse> {
+  retrieve: TangoResolver = async ({ req }) => {
     const id = req.params.id;
     if (id === undefined) {
       throw new Error("No id provided.");
     }
 
-    const result = await AppDataSource.manager.findOne(this.entity, {
-      where: { id: id },
+    // TODO: If a model has no `id` field, this will break.
+    const result = await AppDataSource.manager.findOne<T>(this.entity, {
+      where: { id: id } as unknown as FindOptionsWhere<T>,
     });
 
     if (result === null) {
@@ -110,50 +148,57 @@ export abstract class BaseViewSet<T extends EntityTarget<ObjectLiteral>>
       };
     }
 
+    const serializer = new this.serializer();
+    const serializedResult = await serializer.serialize(result);
+
     return {
       status: 200,
-      body: result,
+      body: serializedResult,
     };
-  }
+  };
 
-  async update(req: Request): Promise<TangoResponse> {
+  update: TangoResolver = async (args) => {
+    return this.partialUpdate(args);
+  };
+
+  partialUpdate: TangoResolver = async ({ req, ...rest }) => {
     const id = req.params.id;
     if (id === undefined) {
       throw new Error("No id provided.");
     }
 
+    // Deserialize the request body.
+    const serializer = new this.serializer();
+    const { value: instance, error } = await serializer.deserialize(req.body);
+    if (error != undefined) {
+      return {
+        status: 400,
+        body: error,
+      };
+    }
+
+    // TODO: If a model has no `id` field, this will break.
     const result = await AppDataSource.manager.update(
       this.entity,
       { id: id },
       req.body
     );
 
-    const newResult = await AppDataSource.manager.findOne(this.entity, {
-      where: { id: id },
-    });
+    return this.retrieve({ req, ...rest });
+  };
 
-    return {
-      status: 201,
-      body: newResult,
-    };
-  }
-
-  async partialUpdate(req: Request): Promise<TangoResponse> {
-    return this.update(req);
-  }
-
-  async delete(req: Request): Promise<TangoResponse> {
+  delete: TangoResolver = async ({ req }) => {
     const id = req.params.id;
     if (id === undefined) {
       throw new Error("No id provided.");
     }
 
-    const result = await AppDataSource.manager.delete(this.entity, {
+    const result = await AppDataSource.manager.delete<T>(this.entity, {
       id: id,
     });
 
     return {
       status: 204,
     };
-  }
+  };
 }
