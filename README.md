@@ -60,7 +60,7 @@ const server = new TangoServer({
   ...
   routes: {
     blog: TangoRouter.convertViewSet(new BlogViewset()),
-    health_check: {
+    "health-check": {
       GET: async (req) => ({
         body: {
           message: "pong!"
@@ -70,6 +70,17 @@ const server = new TangoServer({
     }
   },
 });
+```
+
+Then hit the health check with a cURL:
+```sh
+curl --location --request GET 'http://localhost:8000/health-check/' --header 'Content-Type: application/json'
+
+--- 
+
+{
+    "message": "hello world"
+}
 ```
 
 ## Features
