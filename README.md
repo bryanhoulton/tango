@@ -1,4 +1,4 @@
-# Tango
+# @tango-ts/
 
 Tango is an open source, batteries-included backend framework closely modeled after Django Rest Framework (DRF), but written in TypeScript.
 
