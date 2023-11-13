@@ -4,7 +4,56 @@ Tango is an open source, batteries-included backend framework closely modeled af
 
 ## Getting Started
 
-You can check out the example project [here](https://github.com/bryanhoulton/tango-example) to see how it works.
+You can check out the example project [here](https://github.com/bryanhoulton/tango-example) to see how it works. But here's a quick sneak peak.
+
+Building basic CRUD functionality for a TypeORM entity `Blog` can be done like this:
+```ts
+export class BlogViewset extends BaseViewSet<typeof Blog> {
+  entity = Blog;
+  serializer = BlogSerializer;
+  permissions: Permission[] = [new IsAuthenticated()];
+}
+```
+
+and run the server like this:
+```ts
+const server = new TangoServer({
+  datasource: AppDataSource, // TypeORM datasource to your database
+  routes: {
+    blog: TangoRouter.convertViewSet(new BlogViewset()),
+  },
+});
+
+server.listen({
+  port: 8000,
+});
+```
+
+This generates the following routes:
+- `/blog` GET: List blogs
+- `/blog` POST: Creates a new blog
+- `/blog/:id` GET: Read a specific blog
+- `/blog/:id` PUT: Update a specific blog
+- `/blog/:id` PATCH: Partially update a specific blog
+- `/blog/:id` DELETE: Delete a specific blog
+
+If you want to handle requests without viewsets, that's easy too:
+```ts
+const server = new TangoServer({
+  ...
+  routes: {
+    blog: TangoRouter.convertViewSet(new BlogViewset()),
+    health_check: {
+      GET: async (req) => ({
+        body: {
+          message: "pong!"
+        },
+        status: 200
+      })
+    }
+  },
+});
+```
 
 ## Features
 
@@ -27,6 +76,7 @@ Tango is nowhere near production ready. Use at your own risk. There is no guaran
 ## Roadmap
 
 - [x] Basic CRUD endpoints
+- [x] Extremely basic serializers 
 - [x] Basic URL routing
 - [x] Basic middleware
 - [ ] Basic authentication
