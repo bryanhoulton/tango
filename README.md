@@ -79,7 +79,7 @@ curl --location --request GET 'http://localhost:8000/health-check/' --header 'Co
 --- 
 
 {
-    "message": "hello world"
+    "message": "pong!"
 }
 ```
 
