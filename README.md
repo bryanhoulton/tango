@@ -8,6 +8,10 @@ You can check out the example project [here](https://github.com/bryanhoulton/tan
 
 Building basic CRUD functionality for a TypeORM entity `Blog` can be done like this:
 ```ts
+import {BaseViewSet, Permission, IsAuthenticated} from "@tango-ts/core"
+import {Blog} from "./entities"
+import {BlogSerializer} from "./serializers"
+
 export class BlogViewset extends BaseViewSet<typeof Blog> {
   entity = Blog;
   serializer = BlogSerializer;
@@ -17,9 +21,22 @@ export class BlogViewset extends BaseViewSet<typeof Blog> {
 
 and run the server like this:
 ```ts
+import {
+  RequestLoggingMiddleware,
+  TangoRouter,
+  TangoServer,
+  TokenAuthentication,
+} from '@tango-ts/core';
+
+import { AppDataSource } from './data-source';
+import {
+  BlogViewset,
+} from './viewsets';
+
 const server = new TangoServer({
   datasource: AppDataSource, // TypeORM datasource to your database
   routes: {
+    // Add any resolvable routes here!
     blog: TangoRouter.convertViewSet(new BlogViewset()),
   },
 });
