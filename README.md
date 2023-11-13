@@ -8,7 +8,7 @@ You can check out the example project [here](https://github.com/bryanhoulton/tan
 
 ## Features
 
-- Direct access to TypeORM
+- Direct access to TypeORM entities
 - Automattic CRUD endpoints using ViewSets
 - Easy-to-write views
 - Robust URL routing
@@ -30,7 +30,8 @@ Tango is nowhere near production ready. Use at your own risk. There is no guaran
 - [x] Basic URL routing
 - [x] Basic middleware
 - [ ] Basic authentication
-- [ ] Basic permissions
+- [ ] Batteries included entities (Users, Teams, etc)
+- [x] Basic permissions
 - [ ] Filtering viewsets
 - [ ] Pagination
 - [ ] Throttling
