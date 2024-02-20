@@ -117,6 +117,8 @@ export abstract class BaseViewSet<T extends typeof BaseEntity>
     // Deserialize the request body.
     const serializer = new this.serializer();
     const { value: instance, error } = await serializer.deserialize(req.body);
+    console.log(`Dispatching to method: ${fn}`);
+    console.error(`Request to ${fn} denied due to insufficient permissions.`);
     if (error != undefined) {
       return {
         status: 400,
