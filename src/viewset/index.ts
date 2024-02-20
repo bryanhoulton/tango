@@ -58,6 +58,7 @@ export abstract class BaseViewSet<T extends typeof BaseEntity>
     for (let permission of permissions) {
       const allowed = await permission.hasPermission(req, user);
       if (!allowed) {
+        console.error(`Permission check failed for permission ${permission.constructor.name}: User not allowed.`);
         return false;
       }
     }
