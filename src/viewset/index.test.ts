@@ -71,6 +71,14 @@ describe('BaseViewSet', () => {
       // TODO: Implement test case
     });
   });
+    it('should return a 201 status code and the serialized instance', async () => {
+      // TODO: Implement test case
+    });
+
+    it('should return a 400 status code and an error message when the request body is invalid', async () => {
+      // TODO: Implement test case
+    });
+  });
 
   describe('retrieve', () => {
     it('should return a 200 status code and the serialized result', async () => {
