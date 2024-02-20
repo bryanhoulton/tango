@@ -22,8 +22,8 @@ describe('BaseViewSet', () => {
     baseViewSet = new BaseViewSet();
   });
 
-  describe('getPermissions', () => {
-    it('should return an array of permissions', () => {
+  describe('BaseViewSet - getPermissions', () => {
+    it('should return an array of permissions when permissions are set', () => {
       // TODO: Implement test case
     });
 
