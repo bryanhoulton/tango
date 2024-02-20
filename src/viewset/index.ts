@@ -1,4 +1,5 @@
 import { Request } from 'express';
+import { Logger } from '../utils/logger';
 import {
   BaseEntity,
   FindOptionsWhere,
@@ -93,6 +94,19 @@ export abstract class BaseViewSet<T extends typeof BaseEntity>
 
     return this[fn](...args);
   }
+    const logger = new Logger();
+    logger.info("Starting permission checks.");
+
+    const permissions = this.getPermissions(req);
+    for (let permission of permissions) {
+      const allowed = await permission.hasPermission(req, user);
+      if (!allowed) {
+        logger.error(`Permission check failed for user ${user ? user.id : 'anonymous'} on permission ${permission.constructor.name}.`);
+        return false;
+      }
+    }
+
+    logger.info(`All permission checks passed for user ${user ? user.id : 'anonymous'}.`);
 
   // --------------------------------- Resolvers --------------------------------------
   list: TangoResolver = async ({}) => {
