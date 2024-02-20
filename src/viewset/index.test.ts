@@ -56,6 +56,17 @@ describe('BaseViewSet', () => {
     });
   });
 
+  // Add test suite for dispatch function
+  describe('dispatch', () => {
+    // TODO: Write test cases to cover different scenarios and edge cases for the dispatch function
+  });
+});
+
+    it('should call the corresponding method and return its result when the request is allowed', async () => {
+      // TODO: Implement test case
+    });
+  });
+
   describe('list', () => {
     it('should return a 200 status code and the serialized entities', async () => {
       // TODO: Implement test case
