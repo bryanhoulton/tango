@@ -89,7 +89,7 @@ curl --location --request GET 'http://localhost:8000/health-check/' --header 'Co
 - Automattic CRUD endpoints using ViewSets
 - Easy-to-write views
 - Robust URL routing
-- Out-of-the-box authentication and permissions
+- Out-of-the-box authentication and permissions, including basic and token-based methods
 - Easily accessible middleware
 
 ## Design Choices
@@ -109,6 +109,23 @@ Tango is nowhere near production ready. Use at your own risk. There is no guaran
 - [x] Basic middleware
 - [ ] Basic authentication
 - [ ] Batteries included entities (Users, Teams, etc)
+## Basic Authentication
+
+Tango now supports basic authentication out of the box. This allows you to easily secure your endpoints by requiring a valid username and password for access. Here's how you can enable basic authentication in your `TangoServer` configuration:
+
+```ts
+import { BasicAuthentication } from '@tango-ts/core';
+
+const server = new TangoServer({
+  datasource: AppDataSource,
+  routes: {
+    // Your routes here
+  },
+  global: {
+    middleware: [BasicAuthentication],
+  },
+});
+```
 - [x] Basic permissions
 - [ ] Filtering viewsets
 - [ ] Pagination
