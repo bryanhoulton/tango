@@ -8,7 +8,7 @@ import {
 } from 'tslog';
 import { DataSource } from 'typeorm';
 
-import { User } from '../authentication/user';
+import { User, BasicAuthentication } from '../authentication/index';
 import { JSONObject } from '../response';
 import {
   TangoRoute,
@@ -45,7 +45,7 @@ export class TangoServer {
       minLevel: global.minLogLevel,
     });
     this.singletons = {
-      middleware: [],
+      middleware: [BasicAuthentication],
       authentication: [],
     };
   }
