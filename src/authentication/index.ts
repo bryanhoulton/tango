@@ -6,7 +6,12 @@ import { AppDataSource } from '../example/data-source';
 import { TangoServer } from '../server';
 
 export class Authentication {
-  constructor(public server: TangoServer) {}
+  constructor(public server: TangoServer) {
+  /**
+   * Creates a new instance of the Authentication class.
+   * @param server The TangoServer instance.
+   */
+}
 
   async authenticate(req: Request): Promise<User | null> {
     return null;
