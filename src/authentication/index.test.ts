@@ -1,5 +1,4 @@
 import { TokenAuthentication } from './index';
-import { SomeOtherDependency } from 'testing-library';
 
 describe('TokenAuthentication', () => {
   let tokenAuthentication: TokenAuthentication;
@@ -34,5 +33,4 @@ describe('TokenAuthentication', () => {
   // Add more test cases to cover other scenarios and edge cases
 
 });
-
 // Add more describe blocks and test cases as needed
