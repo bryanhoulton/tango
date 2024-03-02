@@ -7,6 +7,14 @@ import {
 
 export class BlogViewset extends BaseViewSet<typeof Blog> {
   entity = Blog;
+
+  extractLogicalSection1(data: any) {
+    // Implementation details for logical section 1
+  }
+
+  extractLogicalSection2(data: any) {
+    // Implementation details for logical section 2
+  }
   serializer = BlogSerializer;
 }
 
