@@ -16,7 +16,7 @@ const server = new TangoServer({
   routes: {
     blog: TangoRouter.convertViewSet(new BlogViewset()),
     "health-check": {
-      GET: healthCheck,
+      GET: this.extractHealthCheckData,
     },
   },
 });
