@@ -1,17 +1,11 @@
-import { Request } from 'express';
-import {
-  BaseEntity,
-  FindOptionsWhere,
-} from 'typeorm';
+import { Request } from "express";
+import { BaseEntity, FindOptionsWhere } from "typeorm";
 
-import { User } from '../entities/user';
-import { AppDataSource } from '../example/data-source';
-import { Permission } from '../permissions';
-import { Serializer } from '../serializer';
-import {
-  TangoResolver,
-  TangoResponse,
-} from '../view';
+import { User } from "../entities/user";
+import { AppDataSource } from "../example/data-source";
+import { Permission } from "../permissions";
+import { Serializer } from "../serializer";
+import { TangoResolver, TangoResponse } from "../view";
 
 export interface ViewSet {
   list: TangoResolver;
@@ -58,7 +52,9 @@ export abstract class BaseViewSet<T extends typeof BaseEntity>
     for (let permission of permissions) {
       const allowed = await permission.hasPermission(req, user);
       if (!allowed) {
-        console.error(`Permission check failed for permission ${permission.constructor.name}: User not allowed.`);
+        console.error(
+          `Permission check failed for permission ${permission.constructor.name}: User not allowed.`
+        );
         return false;
       }
     }
@@ -121,8 +117,6 @@ list: TangoResolver = async ({}) => {
     // Deserialize the request body.
     const serializer = new this.serializer();
     const { value: instance, error } = await serializer.deserialize(req.body);
-    console.log(`Dispatching to method: ${fn}`);
-    console.error(`Request to ${fn} denied due to insufficient permissions.`);
     if (error != undefined) {
       return {
         status: 400,
