@@ -11,6 +11,7 @@ describe('BlogViewset', () => {
   beforeEach(() => {
     // Initialize any necessary objects or mocks before each test case
     blogViewset = new BlogViewset();
+    blogViewset = new BlogViewset();
   });
 
   test('should create a new blog', () => {
@@ -35,6 +36,11 @@ describe('BlogViewset', () => {
       title: 'Existing Blog',
       content: 'This is an existing blog',
     };
+    const existingBlog = {
+      id: '1',
+      title: 'Existing Blog',
+      content: 'This is an existing blog',
+    };
 
     // Call the retrieve method of the blogViewset with the existing blog id
     const retrievedBlog = blogViewset.retrieve(existingBlog.id);
@@ -47,6 +53,63 @@ describe('BlogViewset', () => {
 
   test('should update an existing blog', () => {
     // Create an existing blog
+    const existingBlog = {
+      id: '1',
+      title: 'Existing Blog',
+      content: 'This is an existing blog',
+    };
+    const existingBlog = {
+      id: '1',
+      title: 'Existing Blog',
+      content: 'This is an existing blog',
+    };
+
+    // Update the title of the existing blog
+    const updatedTitle = 'Updated Blog Title';
+    blogViewset.update(existingBlog.id, { title: updatedTitle });
+
+    // Retrieve the updated blog
+    const updatedBlog = blogViewset.retrieve(existingBlog.id);
+
+    // Assert that the updated blog has the new title
+    expect(updatedBlog.title).toBe(updatedTitle);
+  });
+
+  test('should delete an existing blog', () => {
+    // Create an existing blog
+    const existingBlog = {
+      id: '1',
+      title: 'Existing Blog',
+      content: 'This is an existing blog',
+    };
+    const existingBlog = {
+      id: '1',
+      title: 'Existing Blog',
+      content: 'This is an existing blog',
+    };
+
+    // Call the delete method of the blogViewset with the existing blog id
+    blogViewset.delete(existingBlog.id);
+
+    // Retrieve the deleted blog
+    const deletedBlog = blogViewset.retrieve(existingBlog.id);
+    const deletedBlog = blogViewset.retrieve(existingBlog.id);
+
+    // Assert that the deleted blog is null
+    expect(deletedBlog).toBeNull();
+  });
+
+  // Add more test cases to cover other scenarios and edge cases
+
+});
+
+  test('should update an existing blog', () => {
+    // Create an existing blog
+    const existingBlog = {
+      id: '1',
+      title: 'Existing Blog',
+      content: 'This is an existing blog',
+    };
     const existingBlog = {
       id: '1',
       title: 'Existing Blog',
@@ -77,46 +140,6 @@ describe('BlogViewset', () => {
 
     // Retrieve the deleted blog
     const deletedBlog = blogViewset.retrieve(existingBlog.id);
-
-    // Assert that the deleted blog is null
-    expect(deletedBlog).toBeNull();
-  });
-
-  // Add more test cases to cover other scenarios and edge cases
-
-});
-
-  test('should update an existing blog', () => {
-    // Create an existing blog
-    const existingBlog = {
-      id: '1',
-      title: 'Existing Blog',
-      content: 'This is an existing blog',
-    };
-
-    // Update the title of the existing blog
-    const updatedTitle = 'Updated Blog Title';
-    blogViewset.update(existingBlog.id, { title: updatedTitle });
-
-    // Retrieve the updated blog
-    const updatedBlog = blogViewset.retrieve(existingBlog.id);
-
-    // Assert that the updated blog has the new title
-    expect(updatedBlog.title).toBe(updatedTitle);
-  });
-
-  test('should delete an existing blog', () => {
-    // Create an existing blog
-    const existingBlog = {
-      id: '1',
-      title: 'Existing Blog',
-      content: 'This is an existing blog',
-    };
-
-    // Call the delete method of the blogViewset with the existing blog id
-    blogViewset.delete(existingBlog.id);
-
-    // Retrieve the deleted blog
     const deletedBlog = blogViewset.retrieve(existingBlog.id);
 
     // Assert that the deleted blog is null
