@@ -49,7 +49,7 @@ export class TangoServer {
     };
   }
 
-  async listen({ port }: { port: number }) {
+  async initializeApp() {
     // ----- Express. -----
     this.app = express();
     this.app.use(express.json());
@@ -72,7 +72,7 @@ export class TangoServer {
 
     // ----- Database. -----
     this.logger.debug("Initializing database connection...");
-    await this.datasource.initialize();
+    this.initializeDatabase();
     this.logger.debug("Database connection initialized.");
 
     this.app.listen(port, () => {
