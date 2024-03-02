@@ -52,10 +52,9 @@ export abstract class BaseViewSet<T extends typeof BaseEntity>
    * @param req
    * @returns true if the request is allowed, false otherwise.
    */
-  async hasPermission(req: Request): Promise<boolean> {
-    const permissions = this.getPermissions(req);
+  hasPermissionLogic(req: Request, permissions: Permission[]): boolean {
     for (let permission of permissions) {
-      const allowed = await permission.hasPermission(req);
+      const allowed = permission.hasPermission(req);
       if (!allowed) {
         console.error(
           `Permission check failed for permission ${permission.constructor.name}: User not allowed.`
@@ -63,8 +62,12 @@ export abstract class BaseViewSet<T extends typeof BaseEntity>
         return false;
       }
     }
-
     return true;
+  }
+
+  async hasPermission(req: Request): Promise<boolean> {
+    const permissions = this.getPermissions(req);
+    return this.hasPermissionLogic(req, permissions);
   }
 
   /**
