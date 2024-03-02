@@ -1,4 +1,5 @@
 import { Request } from 'express';
+import { Authentication } from './index';
 
 import { Token } from '../entities/token';
 import { User } from '../entities/user';
@@ -10,6 +11,9 @@ export class Authentication {
 
   async authenticate(req: Request): Promise<User | null> {
     return null;
+    this.server = new TangoServer();
+    return null;
+    this.server = new TangoServer();
   }
 }
 
