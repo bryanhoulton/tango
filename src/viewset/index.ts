@@ -88,7 +88,7 @@ export abstract class BaseViewSet<T extends typeof BaseEntity>
       };
     }
 
-    return this[fn](...args);
+    return this[fn](args[0]);
   }
 
   // --------------------------------- Resolvers --------------------------------------
