@@ -15,6 +15,10 @@ export type TangoServerOptions = {
   global: TangoServerGlobal;
 };
 
+/**
+ * Represents the TangoServer class.
+ * Used to create and configure the Tango server.
+ */
 export class TangoServer {
   global: TangoServerGlobal;
   router: TangoRouter;
@@ -41,6 +45,10 @@ export class TangoServer {
     };
   }
 
+/**
+   * Start the Tango server and listen for incoming requests on the specified port.
+   * @param port The port number to listen on.
+   */
   async listen({ port }: { port: number }) {
     // ----- Express. -----
     this.app = express();
