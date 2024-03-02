@@ -1,4 +1,5 @@
 import { TokenAuthentication } from './index';
+import { SomeOtherDependency } from 'testing-library';
 
 describe('TokenAuthentication', () => {
   let tokenAuthentication: TokenAuthentication;
