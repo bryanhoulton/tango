@@ -1,13 +1,16 @@
-import { Expose } from 'class-transformer';
-import { MinLength } from 'class-validator';
+import { Expose } from "class-transformer";
+import { MinLength } from "class-validator";
 import {
   BaseEntity,
   Column,
   Entity,
+  JoinColumn,
+  ManyToOne,
   PrimaryGeneratedColumn,
-} from 'typeorm';
+} from "typeorm";
 
-import { Serializer } from '../serializer';
+import { User } from "../authentication";
+import { Serializer } from "../serializer";
 
 @Entity()
 export class Blog extends BaseEntity {
@@ -18,6 +21,10 @@ export class Blog extends BaseEntity {
   @Expose()
   @MinLength(0)
   content: string;
+
+  @ManyToOne(() => User)
+  @JoinColumn({ name: "user_id" })
+  user: User;
 }
 
 export class BlogSerializer extends Serializer<typeof Blog> {
