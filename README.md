@@ -1,14 +1,91 @@
-# Tango
+# @tango-ts/
 
 Tango is an open source, batteries-included backend framework closely modeled after Django Rest Framework (DRF), but written in TypeScript.
 
 ## Getting Started
 
-You can check out the example project [here](https://github.com/bryanhoulton/tango-example) to see how it works.
+You can check out the example project [here](https://github.com/bryanhoulton/tango-example) to see how it works. But here's a quick sneak peak.
+
+Building basic CRUD functionality for a TypeORM entity `Blog` can be done like this:
+```ts
+import {BaseViewSet, Permission, IsAuthenticated} from "@tango-ts/core"
+import {Blog} from "./entities"
+import {BlogSerializer} from "./serializers"
+
+export class BlogViewset extends BaseViewSet<typeof Blog> {
+  entity = Blog;
+  serializer = BlogSerializer;
+  permissions: Permission[] = [new IsAuthenticated()];
+}
+```
+
+and run the server like this:
+```ts
+import {
+  RequestLoggingMiddleware,
+  TangoRouter,
+  TangoServer,
+  TokenAuthentication,
+} from '@tango-ts/core';
+
+import { AppDataSource } from './data-source';
+import {
+  BlogViewset,
+} from './viewsets';
+
+const server = new TangoServer({
+  datasource: AppDataSource, // TypeORM datasource to your database
+  routes: {
+    // Add any resolvable routes here!
+    blog: TangoRouter.convertViewSet(new BlogViewset()),
+  },
+});
+
+server.listen({
+  port: 8000,
+});
+```
+
+This generates the following routes:
+- `/blog` GET: List blogs
+- `/blog` POST: Creates a new blog
+- `/blog/:id` GET: Read a specific blog
+- `/blog/:id` PUT: Update a specific blog
+- `/blog/:id` PATCH: Partially update a specific blog
+- `/blog/:id` DELETE: Delete a specific blog
+
+If you want to handle requests without viewsets, that's easy too:
+```ts
+const server = new TangoServer({
+  ...
+  routes: {
+    blog: TangoRouter.convertViewSet(new BlogViewset()),
+    "health-check": {
+      GET: async (req) => ({
+        body: {
+          message: "pong!"
+        },
+        status: 200
+      })
+    }
+  },
+});
+```
+
+Then hit the health check with a cURL:
+```sh
+curl --location --request GET 'http://localhost:8000/health-check/' --header 'Content-Type: application/json'
+
+--- 
+
+{
+    "message": "pong!"
+}
+```
 
 ## Features
 
-- Direct access to TypeORM
+- Direct access to TypeORM entities
 - Automattic CRUD endpoints using ViewSets
 - Easy-to-write views
 - Robust URL routing
@@ -27,10 +104,12 @@ Tango is nowhere near production ready. Use at your own risk. There is no guaran
 ## Roadmap
 
 - [x] Basic CRUD endpoints
+- [x] Extremely basic serializers 
 - [x] Basic URL routing
 - [x] Basic middleware
 - [ ] Basic authentication
-- [ ] Basic permissions
+- [ ] Batteries included entities (Users, Teams, etc)
+- [x] Basic permissions
 - [ ] Filtering viewsets
 - [ ] Pagination
 - [ ] Throttling
