@@ -11,6 +11,9 @@ import { Serializer } from '../serializer';
 
 @Entity()
 export class Blog extends BaseEntity {
+  extractContent(content: string): string {
+    // Extracted content logic
+  }
   @PrimaryGeneratedColumn("uuid")
   id: number;
 
