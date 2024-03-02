@@ -4,6 +4,7 @@ import { TangoServer } from '../server';
 import { AppDataSource } from './data-source';
 import {
   BlogViewset,
+  extractHealthCheckData,
   healthCheck,
 } from './viewsets';
 
