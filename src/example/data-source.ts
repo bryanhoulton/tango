@@ -1,8 +1,8 @@
-import { DataSource } from 'typeorm';
+import { DataSource } from "typeorm";
 
-import { Token } from '../authentication/token';
-import { User } from '../authentication/user';
-import { Blog } from './entity';
+import { Token } from "../entities/token";
+import { User } from "../entities/user";
+import { Blog } from "./entity";
 
 export const AppDataSource = new DataSource({
   type: "sqlite",

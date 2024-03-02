@@ -1,22 +1,13 @@
-import express, {
-  Request,
-  Response,
-} from 'express';
-import {
-  ILogObj,
-  Logger,
-} from 'tslog';
-import { DataSource } from 'typeorm';
+import express, { Request, Response } from "express";
+import { ILogObj, Logger } from "tslog";
+import { DataSource } from "typeorm";
 
-import { User } from '../authentication/user';
-import { JSONObject } from '../response';
-import {
-  TangoRoute,
-  TangoRouter,
-} from '../router';
-import { TangoResolver } from '../view';
-import { TangoServerGlobal } from './global';
-import { TangoServerSingletons } from './singletons';
+import { User } from "../entities/user";
+import { JSONObject } from "../response";
+import { TangoRoute, TangoRouter } from "../router";
+import { TangoResolver } from "../view";
+import { TangoServerGlobal } from "./global";
+import { TangoServerSingletons } from "./singletons";
 
 export type TangoServerOptions = {
   datasource: DataSource;

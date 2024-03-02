@@ -1,9 +1,9 @@
 import { Request } from 'express';
 
+import { Token } from '../entities/token';
+import { User } from '../entities/user';
 import { AppDataSource } from '../example/data-source';
 import { TangoServer } from '../server';
-import { Token } from './token';
-import { User } from './user';
 
 export class Authentication {
   constructor(public server: TangoServer) {}
@@ -47,3 +47,6 @@ export class TokenAuthentication extends Authentication {
     return token.user;
   }
 }
+
+export * from "../entities/token";
+export * from "../entities/user";

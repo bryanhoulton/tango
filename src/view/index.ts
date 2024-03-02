@@ -1,6 +1,6 @@
 import { Request } from 'express';
 
-import { User } from '../authentication/user';
+import { User } from '../entities/user';
 
 export type TangoMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 export type TangoResponse<T = any> = {

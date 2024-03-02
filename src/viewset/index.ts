@@ -4,7 +4,7 @@ import {
   FindOptionsWhere,
 } from 'typeorm';
 
-import { User } from '../authentication/user';
+import { User } from '../entities/user';
 import { AppDataSource } from '../example/data-source';
 import { Permission } from '../permissions';
 import { Serializer } from '../serializer';

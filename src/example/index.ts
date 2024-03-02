@@ -1,12 +1,9 @@
-import { TokenAuthentication } from '../authentication';
-import { RequestLoggingMiddleware } from '../middleware/logging';
-import { TangoRouter } from '../router';
-import { TangoServer } from '../server';
-import { AppDataSource } from './data-source';
-import {
-  BlogViewset,
-  healthCheck,
-} from './viewsets';
+import { TokenAuthentication } from "../authentication";
+import { RequestLoggingMiddleware } from "../middleware/logging";
+import { TangoRouter } from "../router";
+import { TangoServer } from "../server";
+import { AppDataSource } from "./data-source";
+import { BlogViewset, healthCheck } from "./viewsets";
 
 const server = new TangoServer({
   datasource: AppDataSource,

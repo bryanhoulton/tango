@@ -1,6 +1,6 @@
 import { Request } from 'express';
 
-import { User } from '../authentication/user';
+import { User } from '../entities/user';
 
 export interface Permission {
   hasPermission(req: Request, user: User | null): Promise<boolean>;
