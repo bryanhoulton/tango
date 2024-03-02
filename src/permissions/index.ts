@@ -2,6 +2,10 @@ import { Request } from 'express';
 
 import { User } from '../entities/user';
 
+/**
+ * Represents a permission checker interface.
+ * Provides a method for checking user permissions.
+ */
 export interface Permission {
   hasPermission(req: Request, user: User | null): Promise<boolean>;
 }
