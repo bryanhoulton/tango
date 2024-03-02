@@ -1,13 +1,21 @@
-import express, { Request, Response } from "express";
-import { ILogObj, Logger } from "tslog";
-import { DataSource } from "typeorm";
+import express, {
+  Request,
+  Response,
+} from 'express';
+import {
+  ILogObj,
+  Logger,
+} from 'tslog';
+import { DataSource } from 'typeorm';
 
-import { User } from "../entities/user";
-import { JSONObject } from "../response";
-import { TangoRoute, TangoRouter } from "../router";
-import { TangoResolver } from "../view";
-import { TangoServerGlobal } from "./global";
-import { TangoServerSingletons } from "./singletons";
+import { JSONObject } from '../response';
+import {
+  TangoRoute,
+  TangoRouter,
+} from '../router';
+import { TangoResolver } from '../view';
+import { TangoServerGlobal } from './global';
+import { TangoServerSingletons } from './singletons';
 
 export type TangoServerOptions = {
   datasource: DataSource;
@@ -53,12 +61,6 @@ export class TangoServer {
       this.singletons.middleware.push(new middleware(this));
     }
     this.logger.debug("All middleware initialized.");
-
-    this.logger.debug("Initializing authentication...");
-    for (let authentication of this.global.authentication || []) {
-      this.singletons.authentication.push(new authentication(this));
-    }
-    this.logger.debug("All authentication initialized.");
 
     // ----- Bind routes. -----
     this.logger.debug("Binding routes...");
@@ -161,21 +163,10 @@ export class TangoServer {
     return async (req: Request, res: Response) => {
       let status: number = 200;
       let body: JSONObject = {};
-      let user: User | null = null;
-
-      // Pass through any authentication.
-      for (let authentication of this.singletons.authentication || []) {
-        const foundUser = await authentication.authenticate(req);
-        if (foundUser != null) {
-          user = foundUser;
-          this.logger.trace("User authenticated.");
-          break;
-        }
-      }
 
       // Pass through any pre-request middleware.
       for (let middleware of this.singletons.middleware || []) {
-        const result = await middleware.before({ req, status, body, user });
+        const result = await middleware.before({ req, status, body });
         status = result.status;
         body = result.body;
       }
@@ -183,14 +174,13 @@ export class TangoServer {
       // Run through the viewset.
       const result = await resolver({
         req,
-        user,
       });
       status = result.status;
       body = result.body;
 
       // Pass through any post-request middleware.
       for (let middleware of this.singletons.middleware || []) {
-        const result = await middleware.after({ req, status, body, user });
+        const result = await middleware.after({ req, status, body });
         status = result.status;
         body = result.body;
       }

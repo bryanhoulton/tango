@@ -1,12 +1,10 @@
 import { Request } from 'express';
 
-import { User } from '../entities/user';
 import { TangoServer } from '../server';
 import { TangoResponse } from '../view';
 
 export type BeforeArgs = {
   req: Request;
-  user: User | null;
   status: number;
   body: any;
 };

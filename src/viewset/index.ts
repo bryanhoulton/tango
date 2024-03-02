@@ -1,11 +1,16 @@
-import { Request } from "express";
-import { BaseEntity, FindOptionsWhere } from "typeorm";
+import { Request } from 'express';
+import {
+  BaseEntity,
+  FindOptionsWhere,
+} from 'typeorm';
 
-import { User } from "../entities/user";
-import { AppDataSource } from "../example/data-source";
-import { Permission } from "../permissions";
-import { Serializer } from "../serializer";
-import { TangoResolver, TangoResponse } from "../view";
+import { AppDataSource } from '../example/data-source';
+import { Permission } from '../permissions';
+import { Serializer } from '../serializer';
+import {
+  TangoResolver,
+  TangoResponse,
+} from '../view';
 
 export interface ViewSet {
   list: TangoResolver;
@@ -47,10 +52,10 @@ export abstract class BaseViewSet<T extends typeof BaseEntity>
    * @param req
    * @returns true if the request is allowed, false otherwise.
    */
-  async hasPermission(req: Request, user: User | null): Promise<boolean> {
+  async hasPermission(req: Request): Promise<boolean> {
     const permissions = this.getPermissions(req);
     for (let permission of permissions) {
-      const allowed = await permission.hasPermission(req, user);
+      const allowed = await permission.hasPermission(req);
       if (!allowed) {
         console.error(
           `Permission check failed for permission ${permission.constructor.name}: User not allowed.`
@@ -80,8 +85,8 @@ export abstract class BaseViewSet<T extends typeof BaseEntity>
     }
 
     // Check permissions.
-    const { req, user } = args[0];
-    const isAllowed = await this.hasPermission(req, user);
+    const { req } = args[0];
+    const isAllowed = await this.hasPermission(req);
     if (!isAllowed) {
       return {
         status: 403,

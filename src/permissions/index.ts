@@ -1,9 +1,7 @@
 import { Request } from 'express';
 
-import { User } from '../entities/user';
-
 export interface Permission {
-  hasPermission(req: Request, user: User | null): Promise<boolean>;
+  hasPermission(req: Request): Promise<boolean>;
 }
 
 export class AllowAny implements Permission {
@@ -15,11 +13,5 @@ export class AllowAny implements Permission {
 export class AllowNone implements Permission {
   async hasPermission() {
     return false;
-  }
-}
-
-export class IsAuthenticated implements Permission {
-  async hasPermission(req: Request, user: User | null) {
-    return user !== null;
   }
 }
