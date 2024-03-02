@@ -96,7 +96,11 @@ export abstract class BaseViewSet<T extends typeof BaseEntity>
   }
 
   // --------------------------------- Resolvers --------------------------------------
-  list: TangoResolver = async ({}) => {
+  /**
+ * Represents a viewset for the Blog entity.
+ * Provides CRUD operations for the Blog entity.
+ */
+list: TangoResolver = async ({}) => {
     const entities = await AppDataSource.manager.find<T>(this.entity);
     const serializer = new this.serializer();
 
