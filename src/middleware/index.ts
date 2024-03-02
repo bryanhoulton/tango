@@ -13,6 +13,10 @@ export type BeforeArgs = {
 export type AfterArgs = BeforeArgs;
 
 export class Middleware {
+  /**
+   * Represents a middleware for handling requests and responses.
+   * Provides hooks for executing code before and after request processing.
+   */
   server: TangoServer;
 
   constructor(server: TangoServer) {
