@@ -132,7 +132,6 @@
     "kysely": "^0.29.2",
     "levn": "^0.4.1",
     "lightningcss": "^1.32.0",
-    "lightningcss-darwin-arm64": "^1.32.0",
     "listr2": "^10.2.1",
     "locate-path": "^6.0.0",
     "lodash.startcase": "^4.4.0",
