@@ -1,5 +1,13 @@
 # @tango-ts/cli
 
+## 0.4.0
+
+### Patch Changes
+
+- @tango-ts/adapters@0.4.0
+- @tango-ts/migrations@0.4.0
+- @tango-ts/orm@0.4.0
+
 ## 0.3.0
 
 ### Minor Changes

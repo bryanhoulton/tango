@@ -9,6 +9,8 @@ export default tseslint.config(
       'dist/**',
       '**/dist/**',
       'node_modules/**',
+      // Generated migration files (CLI `makemigrations` output: JSON-in-TS).
+      'packages/*/migrations/**',
       '**/*.cjs',
       '**/*.mjs',
       '**/*.js'
@@ -57,6 +59,49 @@ export default tseslint.config(
     files: ['**/*.test.ts', '**/*.spec.ts', '**/*.test-d.ts'],
     rules: {
       '@typescript-eslint/ban-ts-comment': 'off'
+    }
+  },
+  // --- Serverless import-graph guard ---
+  // Server-side packages must never pull browser UI code into the module graph:
+  // anything reachable from a generated project's `api/index.ts` becomes part of
+  // the Vercel function bundle and directly inflates cold starts. React and the
+  // admin UI ship as prebuilt static assets served from the CDN, never imported
+  // by server code. Enforced three ways: this lint rule (source-level),
+  // scripts/check-import-graph.mjs (manifest-level), and the @vercel/nft bundle
+  // trace test in packages/adapters/test (bundle-level).
+  {
+    files: ['packages/**/*.ts'],
+    ignores: ['packages/admin-ui/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'react',
+              message:
+                'Server packages must stay out of the React import graph (serverless cold-start invariant). UI code belongs in @tango-ts/admin-ui, shipped as prebuilt static assets.'
+            },
+            {
+              name: 'react-dom',
+              message:
+                'Server packages must stay out of the React import graph (serverless cold-start invariant). UI code belongs in @tango-ts/admin-ui, shipped as prebuilt static assets.'
+            },
+            {
+              name: '@tango-ts/admin-ui',
+              message:
+                'Never import @tango-ts/admin-ui from server code — its dist/ is served as static assets so it adds zero bytes to the function bundle.'
+            }
+          ],
+          patterns: [
+            {
+              group: ['react/*', 'react-dom/*', '@tango-ts/admin-ui/*'],
+              message:
+                'Server packages must stay out of the React/admin-ui import graph (serverless cold-start invariant).'
+            }
+          ]
+        }
+      ]
     }
   }
 )

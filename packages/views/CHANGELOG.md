@@ -1,5 +1,16 @@
 # @tango-ts/views
 
+## 0.4.0
+
+### Patch Changes
+
+- @tango-ts/auth@0.4.0
+- @tango-ts/core-types@0.4.0
+- @tango-ts/http@0.4.0
+- @tango-ts/orm@0.4.0
+- @tango-ts/router@0.4.0
+- @tango-ts/serializers@0.4.0
+
 ## 0.3.0
 
 ### Patch Changes

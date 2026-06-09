@@ -33,7 +33,7 @@
     "prepare": "husky"
   },
   "lint-staged": {
-    "*.ts": "eslint --max-warnings=0"
+    "*.ts": "eslint --max-warnings=0 --no-warn-ignored"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
