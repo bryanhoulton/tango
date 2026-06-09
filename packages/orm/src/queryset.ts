@@ -37,6 +37,32 @@ interface FilterClause {
   readonly negate: boolean
 }
 
+/**
+ * Django-style ordering key: a column name, or `-column` for descending.
+ * `'name'` orders ascending, `'-createdAt'` orders descending.
+ */
+export type OrderingKey<Row> = Extract<keyof Row, string> | `-${Extract<keyof Row, string>}`
+
+interface QuerySetState {
+  readonly clauses: readonly FilterClause[]
+  readonly selectedRelations: readonly string[]
+  readonly ordering: readonly string[]
+  readonly limitCount?: number
+  readonly offsetCount?: number
+}
+
+const EMPTY_STATE: QuerySetState = {
+  clauses: [],
+  selectedRelations: [],
+  ordering: []
+}
+
+/**
+ * MySQL requires LIMIT when OFFSET is present. Mirror Django's "offset without
+ * limit" behavior by passing an effectively-unlimited row count.
+ */
+const UNLIMITED = Number.MAX_SAFE_INTEGER
+
 interface JoinSpec {
   readonly alias: string
   readonly parent: string
@@ -233,16 +259,23 @@ export class QuerySet<Row, Lk, Selectable extends string = never>
   constructor(
     private readonly tableName: string,
     private readonly relations: readonly RelationSpec[] = [],
-    private readonly clauses: readonly FilterClause[] = [],
-    private readonly selectedRelations: readonly string[] = []
+    private readonly state: QuerySetState = EMPTY_STATE
   ) {}
+
+  private withState(changes: Partial<QuerySetState>): QuerySetState {
+    return { ...this.state, ...changes }
+  }
 
   filter(lookups: Lk): QuerySet<Row, Lk, Selectable> {
     return new QuerySet<Row, Lk, Selectable>(
       this.tableName,
       this.relations,
-      [...this.clauses, { lookups: lookups as Record<string, unknown>, negate: false }],
-      this.selectedRelations
+      this.withState({
+        clauses: [
+          ...this.state.clauses,
+          { lookups: lookups as Record<string, unknown>, negate: false }
+        ]
+      })
     )
   }
 
@@ -250,8 +283,48 @@ export class QuerySet<Row, Lk, Selectable extends string = never>
     return new QuerySet<Row, Lk, Selectable>(
       this.tableName,
       this.relations,
-      [...this.clauses, { lookups: lookups as Record<string, unknown>, negate: true }],
-      this.selectedRelations
+      this.withState({
+        clauses: [
+          ...this.state.clauses,
+          { lookups: lookups as Record<string, unknown>, negate: true }
+        ]
+      })
+    )
+  }
+
+  /**
+   * Order results Django-style: `orderBy('name', '-createdAt')`. A leading `-`
+   * orders descending. Calling `orderBy` replaces any previous ordering.
+   */
+  orderBy(...keys: readonly OrderingKey<Row>[]): QuerySet<Row, Lk, Selectable> {
+    return new QuerySet<Row, Lk, Selectable>(
+      this.tableName,
+      this.relations,
+      this.withState({ ordering: keys })
+    )
+  }
+
+  /** Cap the number of rows returned (SQL LIMIT). */
+  limit(count: number): QuerySet<Row, Lk, Selectable> {
+    if (!Number.isInteger(count) || count < 0) {
+      throw new Error(`limit() expects a non-negative integer, got ${count}.`)
+    }
+    return new QuerySet<Row, Lk, Selectable>(
+      this.tableName,
+      this.relations,
+      this.withState({ limitCount: count })
+    )
+  }
+
+  /** Skip the first `count` rows (SQL OFFSET). */
+  offset(count: number): QuerySet<Row, Lk, Selectable> {
+    if (!Number.isInteger(count) || count < 0) {
+      throw new Error(`offset() expects a non-negative integer, got ${count}.`)
+    }
+    return new QuerySet<Row, Lk, Selectable>(
+      this.tableName,
+      this.relations,
+      this.withState({ offsetCount: count })
     )
   }
 
@@ -264,21 +337,18 @@ export class QuerySet<Row, Lk, Selectable extends string = never>
     return new QuerySet<NextRow, Lk, Selectable>(
       this.tableName,
       this.relations,
-      this.clauses,
-      this.selectedRelations.includes(path)
-        ? this.selectedRelations
-        : [...this.selectedRelations, path]
+      this.withState({
+        selectedRelations: this.state.selectedRelations.includes(path)
+          ? this.state.selectedRelations
+          : [...this.state.selectedRelations, path]
+      })
     )
   }
 
-  private build(db: ActiveConnection) {
-    const joinedRelations = this.relationsToJoin()
-    let query =
-      joinedRelations.length === 0
-        ? db.selectFrom(this.tableName).selectAll()
-        : db.selectFrom(this.tableName).selectAll(this.tableName)
+  private buildBase(db: ActiveConnection) {
+    let query = db.selectFrom(this.tableName)
 
-    for (const join of joinedRelations) {
+    for (const join of this.relationsToJoin()) {
       const relation = join.relation
       const parent = join.parent.length === 0 ? this.tableName : join.parent
       query = query.leftJoin(
@@ -288,15 +358,7 @@ export class QuerySet<Row, Lk, Selectable extends string = never>
       )
     }
 
-    for (const join of this.selectedRelationJoins()) {
-      for (const column of Object.keys(join.relation.target().fields ?? {})) {
-        query = query.select(
-          sql.ref(`${join.alias}.${column}`).as(`${join.alias}__${column}`)
-        )
-      }
-    }
-
-    for (const clause of this.clauses) {
+    for (const clause of this.state.clauses) {
       query = query.where((eb) => {
         const predicates = Object.entries(clause.lookups).map(([key, value]) =>
           compileLookup(eb, key, value, this.relations)
@@ -308,12 +370,47 @@ export class QuerySet<Row, Lk, Selectable extends string = never>
     return query
   }
 
+  private build(db: ActiveConnection) {
+    const hasJoins = this.relationsToJoin().length > 0
+    let query = hasJoins
+      ? this.buildBase(db).selectAll(this.tableName)
+      : this.buildBase(db).selectAll()
+
+    for (const join of this.selectedRelationJoins()) {
+      for (const column of Object.keys(join.relation.target().fields ?? {})) {
+        query = query.select(
+          sql.ref(`${join.alias}.${column}`).as(`${join.alias}__${column}`)
+        )
+      }
+    }
+
+    for (const key of this.state.ordering) {
+      const descending = key.startsWith('-')
+      const column = descending ? key.slice(1) : key
+      query = query.orderBy(sql.ref(column), descending ? 'desc' : 'asc')
+    }
+
+    if (this.state.limitCount !== undefined) {
+      query = query.limit(this.state.limitCount)
+    } else if (this.state.offsetCount !== undefined) {
+      query = query.limit(UNLIMITED)
+    }
+    if (this.state.offsetCount !== undefined) {
+      query = query.offset(this.state.offsetCount)
+    }
+    return query
+  }
+
+  private buildCount(db: ActiveConnection) {
+    return this.buildBase(db).select((eb) => eb.fn.countAll().as('count'))
+  }
+
   private relationsToJoin(): JoinSpec[] {
     const joins: JoinSpec[] = []
-    for (const path of this.selectedRelations) {
+    for (const path of this.state.selectedRelations) {
       joins.push(...resolveRelationChain(path.split('__'), this.relations).joins)
     }
-    for (const clause of this.clauses) {
+    for (const clause of this.state.clauses) {
       for (const key of Object.keys(clause.lookups)) {
         joins.push(...relationForLookup(key, this.relations))
       }
@@ -323,7 +420,7 @@ export class QuerySet<Row, Lk, Selectable extends string = never>
 
   private selectedRelationJoins(): JoinSpec[] {
     return dedupeJoins(
-      this.selectedRelations.flatMap(
+      this.state.selectedRelations.flatMap(
         (path) => resolveRelationChain(path.split('__'), this.relations).joins
       )
     )
@@ -334,10 +431,24 @@ export class QuerySet<Row, Lk, Selectable extends string = never>
     return this.build(COMPILE_ONLY).compile()
   }
 
+  /** Compile the COUNT query without a database. Used by unit tests and debugging. */
+  compileCount(): CompiledQuery {
+    return this.buildCount(COMPILE_ONLY).compile()
+  }
+
   /** Execute against the active connection. */
   async fetch(): Promise<Row[]> {
     const rows = await this.build(getConnection()).execute()
     return rows.map((row) => this.inflateSelectedRelations(row)) as Row[]
+  }
+
+  /**
+   * Count matching rows with SQL `COUNT(*)`. Ignores `limit`/`offset`/ordering —
+   * it counts everything the filters match (Django's `QuerySet.count()`).
+   */
+  async count(): Promise<number> {
+    const row = await this.buildCount(getConnection()).executeTakeFirstOrThrow()
+    return Number(row.count)
   }
 
   private inflateSelectedRelations(row: Record<string, unknown>): Record<string, unknown> {

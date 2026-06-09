@@ -190,6 +190,31 @@ describe('ORM against a real MySQL', () => {
       expect(everyone.length).toBe(3)
     })
   })
+
+  it('counts in SQL without fetching rows', async () => {
+    await withConnection(db, async () => {
+      expect(await User.objects.count()).toBe(3)
+      expect(await User.objects.filter({ age__gte: 18 }).count()).toBe(2)
+    })
+  })
+
+  it('orders, limits, and offsets in SQL', async () => {
+    await withConnection(db, async () => {
+      const oldestFirst = await User.objects.all().orderBy('-age')
+      expect(oldestFirst.map((u) => u.email)).toEqual([
+        'cy@example.com',
+        'ann@example.com',
+        'bob@example.com'
+      ])
+
+      const secondPage = await User.objects
+        .all()
+        .orderBy('-age')
+        .limit(1)
+        .offset(1)
+      expect(secondPage.map((u) => u.email)).toEqual(['ann@example.com'])
+    })
+  })
 })
 
 describe('ORM atomic transactions against a real MySQL', () => {

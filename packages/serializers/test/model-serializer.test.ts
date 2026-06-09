@@ -67,6 +67,59 @@ describe('modelSerializer', () => {
     })
   })
 
+  it('accepts ISO 8601 strings for datetime fields and normalizes to Date', () => {
+    const Event = model('events', {
+      id: f.int().primaryKey().autoIncrement(),
+      startsAt: f.datetime(),
+      day: f.date()
+    })
+    const EventSerializer = modelSerializer(Event, {
+      fields: ['id', 'startsAt', 'day'] as const,
+      readOnlyFields: ['id'] as const
+    })
+
+    const serializer = EventSerializer.forUnknownInput({
+      startsAt: '2026-06-09T12:30:00Z',
+      day: '2026-06-09'
+    })
+
+    expect(serializer.isValid()).toBe(true)
+    const data = serializer.validatedData as { startsAt: Date; day: Date }
+    expect(data.startsAt).toBeInstanceOf(Date)
+    expect(data.startsAt.toISOString()).toBe('2026-06-09T12:30:00.000Z')
+    expect(data.day).toBeInstanceOf(Date)
+    // Local midnight, so the calendar date round-trips through MySQL DATE.
+    expect(data.day.getFullYear()).toBe(2026)
+    expect(data.day.getMonth()).toBe(5)
+    expect(data.day.getDate()).toBe(9)
+  })
+
+  it('rejects strings that are not valid ISO dates', () => {
+    const Event = model('events', {
+      id: f.int().primaryKey().autoIncrement(),
+      startsAt: f.datetime(),
+      day: f.date().nullable()
+    })
+    const EventSerializer = modelSerializer(Event, {
+      fields: ['id', 'startsAt', 'day'] as const,
+      readOnlyFields: ['id'] as const
+    })
+
+    const cases: [unknown, unknown][] = [
+      ['5', '2026-02-30'], // `new Date('5')` parses but is not ISO; Feb 30 is not a real date
+      ['2026-06-09', 'June 9'], // date-only is not a datetime; prose is not ISO
+      [1717939800000, true] // epoch numbers and booleans are rejected
+    ]
+    for (const [startsAt, day] of cases) {
+      const serializer = EventSerializer.forUnknownInput({ startsAt, day })
+      expect(serializer.isValid()).toBe(false)
+      expect(serializer.errors).toEqual({
+        startsAt: ['Expected ISO 8601 datetime.'],
+        day: ['Expected ISO 8601 date (YYYY-MM-DD) or null.']
+      })
+    }
+  })
+
   it('rejects unknown input fields', () => {
     const serializer = UserSerializer.forUnknownInput({
       email: 'ada@example.com',

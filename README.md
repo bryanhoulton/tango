@@ -202,17 +202,37 @@ steps.
 
 ## Deployment
 
-Deployment guidance is not final yet. The intended shape is:
+Generated projects ship a `Dockerfile`, `.env.example`, and a `start` script, so
+the supported deployment today is a long-running Node container (Railway,
+Render, Fly.io, ECS, ...). The release pipeline:
 
 1. Build the project with `yarn build`.
 2. Run `tango check` in CI to fail when model changes are missing migrations.
 3. Run `tango migrate` during deployment, before traffic reaches the new code.
-4. Export the project handler through the adapter for the target runtime.
-5. Provide database settings through `TANGO_DB_*` environment variables.
+4. Run `tango serve` (the container default command). It reads `HOST`/`PORT`
+   from the environment, drains in-flight requests on `SIGTERM`, and closes the
+   database pool on shutdown.
+
+Database settings come from `TANGO_DB_*` variables or a single
+`TANGO_DATABASE_URL` (`mysql://user:pass@host:3306/db?ssl=true`). TLS is
+enabled with `TANGO_DB_SSL=true`. When `NODE_ENV=production`, missing database
+configuration fails at startup instead of falling back to development defaults.
+
+Production middleware (request logging with request IDs, security headers,
+CORS, body-size limits) is configured declaratively on the project:
+
+```ts
+import { cors, defineProject, requestLog, securityHeaders } from '@tango-ts/server'
+
+export const project = defineProject({
+  // ...
+  middleware: [requestLog(), securityHeaders(), cors({ origins: ['https://app.example.com'] })]
+})
+```
 
 The important constraint is that Tango apps are Web handlers and migrations are
-deploy-time commands. Request handling should stay stateless and should not open
-long-lived process-global database pools or run schema changes.
+deploy-time commands. Request handling should stay stateless and should not run
+schema changes.
 
 ## Working On Tango Itself
 

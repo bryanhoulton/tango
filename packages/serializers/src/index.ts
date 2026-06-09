@@ -81,37 +81,87 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function expectedMessage(field: Field): string {
+  const orNull = field.spec.nullable ? ' or null' : ''
   switch (field.spec.columnType) {
     case 'int':
     case 'float':
-      return field.spec.nullable ? 'Expected number or null.' : 'Expected number.'
+      return `Expected number${orNull}.`
     case 'varchar':
     case 'text':
-      return field.spec.nullable ? 'Expected string or null.' : 'Expected string.'
+      return `Expected string${orNull}.`
     case 'boolean':
-      return field.spec.nullable ? 'Expected boolean or null.' : 'Expected boolean.'
+      return `Expected boolean${orNull}.`
     case 'datetime':
+      return `Expected ISO 8601 datetime${orNull}.`
     case 'date':
-      return field.spec.nullable ? 'Expected Date or null.' : 'Expected Date.'
+      return `Expected ISO 8601 date (YYYY-MM-DD)${orNull}.`
   }
 }
 
-function valueMatches(field: Field, value: unknown): boolean {
+// JSON has no Date type, so datetime/date fields accept ISO 8601 strings over
+// HTTP and normalize them to Date for the ORM. `new Date(...)` alone is not a
+// validator (it "parses" garbage like "5"), hence the explicit patterns.
+const DATETIME_PATTERN =
+  /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d{1,6})?)?(Z|[+-]\d{2}:?\d{2})?$/
+const DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/
+
+type NormalizedValue = { readonly ok: true; readonly value: unknown } | { readonly ok: false }
+
+const INVALID: NormalizedValue = { ok: false }
+
+function normalizeDatetime(value: unknown): NormalizedValue {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return { ok: true, value }
+  }
+  if (typeof value === 'string' && DATETIME_PATTERN.test(value)) {
+    const parsed = new Date(value)
+    if (!Number.isNaN(parsed.getTime())) {
+      return { ok: true, value: parsed }
+    }
+  }
+  return INVALID
+}
+
+function normalizeDate(value: unknown): NormalizedValue {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return { ok: true, value }
+  }
+  if (typeof value !== 'string') {
+    return INVALID
+  }
+  const match = DATE_PATTERN.exec(value)
+  if (match === null) {
+    return INVALID
+  }
+  const [, year, month, day] = match
+  // Local midnight survives mysql2's local-time formatting, so the calendar
+  // date the client sent is the calendar date stored in the DATE column.
+  const parsed = new Date(Number(year), Number(month) - 1, Number(day))
+  const isRealCalendarDate =
+    parsed.getFullYear() === Number(year) &&
+    parsed.getMonth() === Number(month) - 1 &&
+    parsed.getDate() === Number(day)
+  return isRealCalendarDate ? { ok: true, value: parsed } : INVALID
+}
+
+/** Validate a value against a field and normalize it for persistence. */
+function normalizeValue(field: Field, value: unknown): NormalizedValue {
   if (value === null) {
-    return field.spec.nullable
+    return field.spec.nullable ? { ok: true, value: null } : INVALID
   }
   switch (field.spec.columnType) {
     case 'int':
     case 'float':
-      return typeof value === 'number'
+      return typeof value === 'number' ? { ok: true, value } : INVALID
     case 'varchar':
     case 'text':
-      return typeof value === 'string'
+      return typeof value === 'string' ? { ok: true, value } : INVALID
     case 'boolean':
-      return typeof value === 'boolean'
+      return typeof value === 'boolean' ? { ok: true, value } : INVALID
     case 'datetime':
+      return normalizeDatetime(value)
     case 'date':
-      return value instanceof Date
+      return normalizeDate(value)
   }
 }
 
@@ -183,12 +233,12 @@ export class ModelSerializerInstance<
         }
         continue
       }
-      const value = this.input[name]
-      if (!valueMatches(field, value)) {
+      const normalized = normalizeValue(field, this.input[name])
+      if (!normalized.ok) {
         errors[name] = [expectedMessage(field)]
         continue
       }
-      validated[name] = value
+      validated[name] = normalized.value
     }
 
     this.currentErrors = errors

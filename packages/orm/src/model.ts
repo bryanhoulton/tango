@@ -109,6 +109,10 @@ export class Manager<F extends Fields, R extends Relations = NoRelations> {
     return this.all().get(lookups)
   }
 
+  count(): Promise<number> {
+    return this.all().count()
+  }
+
   selectRelated<Path extends SelectRelatedPath<F, R> & string>(
     path: Path
   ): QuerySet<

@@ -28,10 +28,19 @@ rendering, ORM behavior, or adapter internals.
 - `migrateApp(...)` — applies generated migrations via the shared executor.
 - `loadHandler(path)` — loads a default/exported Web handler or router-like object
   with `handle(request)`.
+- `runServer(...)` — the `tango serve` implementation: serves the built handler,
+  blocks until `SIGINT`/`SIGTERM`, drains in-flight requests (with a force-close
+  timeout), and calls the project's `dispose()` to release the database pool.
 - `runDevServer(...)` — watches source files, runs the configured build command, and
   reloads the built handler after successful rebuilds.
-- `startProject(...)` — copies the default project template to a target directory.
+- `startProject(...)` — copies the default project template to a target directory,
+  including deployment assets (`Dockerfile`, `.dockerignore`, `.env.example`,
+  `.gitignore`, `README.md`). Dotfiles are stored as `__DOT__name` in the template
+  because npm mangles real dotfiles when packing.
 - `startApp(...)` — copies the default app template to a target directory.
+- `mysqlConnectionOptionsFromEnv(...)` — delegates to the ORM's
+  `mysqlConfigFromEnv`, sharing URL/TLS/fail-loud-in-production resolution with
+  `mysqlFromEnv`.
 
 Scaffold usage:
 
@@ -43,7 +52,7 @@ yarn tango startapp billing --directory src/apps/billing
 Scaffolds are copied from `templates/default-project` and `templates/default-app`, so
 the generated layout is easy to inspect and evolve.
 
-Local dev server usage:
+Server usage:
 
 ```sh
 tango serve
@@ -51,7 +60,9 @@ tango serve --handler ./dist/server.js --host 127.0.0.1 --port 8000
 tango dev --handler ./dist/server.js --watch ./src --build "yarn clean && yarn build"
 ```
 
-In generated projects, `tango serve` defaults to `./dist/project.js`.
+In generated projects, `tango serve` defaults to `./dist/project.js`. When
+`--host`/`--port` are not passed, `tango serve` reads `HOST`/`PORT` from the
+environment (container platforms set `PORT`), defaulting to `127.0.0.1:8000`.
 
 The handler module can export a Web handler:
 

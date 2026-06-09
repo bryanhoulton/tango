@@ -66,6 +66,26 @@ describe('scaffold commands', () => {
       await expect(readFile(join(projectDir, 'src/apps/core/routes.ts'), 'utf8')).resolves.toContain(
         "route('GET', '/health/live/'"
       )
+      expect(parsedPackageJson.scripts['start']).toBe('tango serve')
+      await expect(readFile(join(projectDir, 'src/project.ts'), 'utf8')).resolves.toContain(
+        'middleware: [requestLog(), securityHeaders()]'
+      )
+      // Deployment assets, with dotfiles renamed from their __DOT__ template names.
+      await expect(readFile(join(projectDir, '.gitignore'), 'utf8')).resolves.toContain(
+        'node_modules'
+      )
+      await expect(readFile(join(projectDir, '.dockerignore'), 'utf8')).resolves.toContain(
+        '.env'
+      )
+      await expect(readFile(join(projectDir, '.env.example'), 'utf8')).resolves.toContain(
+        'TANGO_DB_NAME=shop'
+      )
+      const dockerfile = await readFile(join(projectDir, 'Dockerfile'), 'utf8')
+      expect(dockerfile).toContain('EXPOSE 8000')
+      expect(dockerfile).toContain('tango')
+      await expect(readFile(join(projectDir, 'README.md'), 'utf8')).resolves.toContain(
+        '# shop'
+      )
     } finally {
       await rm(dir, { recursive: true, force: true })
     }

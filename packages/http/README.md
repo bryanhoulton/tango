@@ -3,8 +3,10 @@
 ## Responsibility
 
 Runtime-agnostic Web `Request` / `Response` primitives for Tango. This package owns
-request context creation, lazy JSON parsing, and JSON/detail response helpers. It does
-not own routing, view dispatch, ORM access, or platform adapters.
+request context creation, lazy JSON parsing, JSON/detail response helpers, the
+middleware pipeline with its production built-ins (CORS, security headers, body-size
+limits, request logging), and the `Logger` contract. It does not own routing, view
+dispatch, ORM access, or platform adapters.
 
 ## What it responds to
 
@@ -17,6 +19,11 @@ not own routing, view dispatch, ORM access, or platform adapters.
 - `jsonResponse(body, { status, headers })`.
 - `detailResponse(detail, status)`.
 - `createRequestContext(request, params)`.
+- `Middleware` + `applyMiddleware(handler, middleware)` — Web-standard middleware
+  composition, outermost-first.
+- Built-in middleware: `cors(...)` (including `OPTIONS` preflights), `securityHeaders(...)`,
+  `bodyLimit({ maxBytes })`, `requestLog(...)` (structured logs with `x-request-id`).
+- `Logger` contract, `consoleLogger()` (JSON lines), `errorFields(err)`.
 
 ## Design patterns that matter here
 
@@ -33,5 +40,7 @@ Everything exported from `src/index.ts`.
 
 ## Testing
 
-Covered through `@tango-ts/router` and `@tango-ts/views` tests, including real Web
-`Request` / `Response` integration.
+- Unit (`test/middleware.test.ts`): middleware composition order, CORS preflight and
+  response decoration, security headers, body limits, and request logging.
+- Also covered through `@tango-ts/router` and `@tango-ts/views` tests, including real
+  Web `Request` / `Response` integration.

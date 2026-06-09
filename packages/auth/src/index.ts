@@ -23,6 +23,12 @@ export interface Authentication {
 export interface Permission {
   readonly requiresAuthentication?: boolean
   hasPermission(ctx: RequestContext): MaybePromise<boolean>
+  /**
+   * Object-level check (DRF's `has_object_permission`). Called by viewsets for
+   * detail actions after the row is fetched; denial is a 403. Optional — most
+   * permissions only gate the request itself.
+   */
+  hasObjectPermission?(ctx: RequestContext, obj: unknown): MaybePromise<boolean>
 }
 
 export type TokenVerifier = (

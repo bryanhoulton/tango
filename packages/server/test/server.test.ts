@@ -49,6 +49,69 @@ describe('defineServer', () => {
     expect(await response.json()).toEqual({ app: 'commerce' })
   })
 
+  it('runs middleware around routing, inside the database scope', async () => {
+    const order: string[] = []
+    const handler = defineProject({
+      name: 'shop',
+      database: COMPILE_ONLY,
+      routes: defineRoutes([
+        route('GET', '/ping/', () => {
+          order.push('handler')
+          // Middleware and handlers share the request's connection scope.
+          expect(getConnection()).toBe(COMPILE_ONLY)
+          return jsonResponse({ ok: true })
+        })
+      ]),
+      middleware: [
+        async (request, next) => {
+          order.push('before')
+          expect(getConnection()).toBe(COMPILE_ONLY)
+          const response = await next(request)
+          order.push('after')
+          return response
+        }
+      ]
+    })
+
+    const response = await handler(new Request('https://example.test/ping/'))
+    expect(response.status).toBe(200)
+    expect(order).toEqual(['before', 'handler', 'after'])
+  })
+
+  it('middleware can short-circuit before routing', async () => {
+    const handler = defineProject({
+      name: 'shop',
+      database: COMPILE_ONLY,
+      routes: defineRoutes([
+        route('GET', '/secret/', () => jsonResponse({ secret: true }))
+      ]),
+      middleware: [
+        (request) =>
+          request.headers.get('x-block') === null
+            ? jsonResponse({ blocked: true }, { status: 403 })
+            : jsonResponse({ blocked: false })
+      ]
+    })
+
+    const response = await handler(new Request('https://example.test/secret/'))
+    expect(response.status).toBe(403)
+    expect(await response.json()).toEqual({ blocked: true })
+  })
+
+  it('exposes dispose() that destroys the database', async () => {
+    let destroyed = false
+    const database = Object.create(COMPILE_ONLY) as typeof COMPILE_ONLY
+    Object.defineProperty(database, 'destroy', {
+      value: () => {
+        destroyed = true
+        return Promise.resolve()
+      }
+    })
+    const handler = defineProject({ name: 'shop', database })
+    await handler.dispose()
+    expect(destroyed).toBe(true)
+  })
+
   it('mysqlFromEnv can derive database name from project name', () => {
     const original = process.env.TANGO_DB_NAME
     delete process.env.TANGO_DB_NAME

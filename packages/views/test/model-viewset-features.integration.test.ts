@@ -38,6 +38,17 @@ router.register(
   })
 )
 
+const orderedRouter = createRouter()
+orderedRouter.register(
+  '/users',
+  modelViewSet({
+    model: User,
+    serializer: UserSerializer,
+    ordering: ['-age'] as const,
+    pagination: { pageSize: 2 }
+  })
+)
+
 const protectedRouter = createRouter()
 protectedRouter.register(
   '/users',
@@ -58,6 +69,10 @@ async function handle(request: Request): Promise<Response> {
 
 async function handleProtected(request: Request): Promise<Response> {
   return withConnection(db, () => protectedRouter.handle(request))
+}
+
+async function handleOrdered(request: Request): Promise<Response> {
+  return withConnection(db, () => orderedRouter.handle(request))
 }
 
 beforeAll(async () => {
@@ -125,6 +140,40 @@ describe('ModelViewSet filters, pagination, permissions, and parse errors', () =
         { id: 2, email: 'bob@example.com', age: 17, name: 'Bob' }
       ]
     })
+  })
+
+  it('serves later pages from SQL LIMIT/OFFSET with correct links', async () => {
+    const response = await handle(new Request('https://example.test/users/?page=2'))
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      count: 3,
+      next: null,
+      previous: 'https://example.test/users/?page=1',
+      results: [{ id: 3, email: 'grace@example.com', age: 42, name: 'Grace' }]
+    })
+  })
+
+  it('returns an empty page past the end while keeping the true count', async () => {
+    const response = await handle(new Request('https://example.test/users/?page=9'))
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      count: 3,
+      next: null,
+      previous: 'https://example.test/users/?page=8',
+      results: []
+    })
+  })
+
+  it('applies declared ordering in SQL', async () => {
+    const response = await handleOrdered(
+      new Request('https://example.test/users/?pageSize=10')
+    )
+
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as { results: { id: number }[] }
+    expect(body.results.map((row) => row.id)).toEqual([3, 1, 2])
   })
 
   it('runs auth and permission hooks before view logic', async () => {

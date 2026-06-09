@@ -15,12 +15,18 @@ routing, views, ORM behavior, or migrations.
 
 ## Functionality
 
-- `defineServer({ app, routes, database })` -> Web handler.
-- `defineProject({ name, database, routes, apps })` -> named Web handler for a root
-  project with nested apps.
-- `mysqlFromEnv()` -> MySQL connection using `TANGO_DB_*` env vars.
+- `defineServer({ app, routes, database, middleware })` -> Web handler.
+- `defineProject({ name, database, routes, apps, middleware })` -> named Web handler
+  for a root project with nested apps. Middleware run outermost-first, inside the
+  request's database scope. The handler exposes `dispose()` to release the database
+  pool at process shutdown.
+- `mysqlFromEnv()` -> MySQL connection from `TANGO_DB_*` env vars or
+  `TANGO_DATABASE_URL`/`DATABASE_URL`, with TLS (`TANGO_DB_SSL`) and pool sizing
+  (`TANGO_DB_POOL_SIZE`). Refuses development defaults when `NODE_ENV=production`.
 - `mysqlFromEnv({ projectName })` -> uses the project name as the fallback database
   name when `TANGO_DB_NAME` is not configured.
+- Re-exports the middleware built-ins (`cors`, `securityHeaders`, `bodyLimit`,
+  `requestLog`, `consoleLogger`) so projects configure everything from one import.
 
 ## Design patterns that matter here
 

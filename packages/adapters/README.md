@@ -13,10 +13,16 @@ views, ORM behavior, migrations, or platform-specific cloud adapters yet.
 
 ## Functionality
 
-- `createNodeServer(handler)` — creates a Node `http.Server` from a Web handler.
-- `serve(handlerOrServer, { host, port })` — starts a local development server and
-  returns `{ server, url, close() }`.
-- JSON 500 envelope for unexpected handler errors.
+- `createNodeServer(handler, { logger, maxBodyBytes })` — creates a Node
+  `http.Server` from a Web handler.
+- `serve(handlerOrServer, { host, port, logger, maxBodyBytes })` — starts a server
+  and returns `{ server, url, close() }`. `close()` drops idle keep-alive sockets
+  and waits for in-flight requests.
+- JSON 500 envelope for unexpected handler errors; the error itself is reported to
+  the configured `Logger` (default: structured console logging) so failures are
+  never silent.
+- Request bodies are size-capped while streaming (default 10 MiB) and rejected
+  with a JSON 413 envelope.
 
 ## Design patterns that matter here
 

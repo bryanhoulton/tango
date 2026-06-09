@@ -20,10 +20,11 @@ the lazy QuerySet, Django-style lookups, and the request-scoped connection. Does
 - `f.*` — field builders (`int`, `float`, `varchar`, `text`, `boolean`, `datetime`,
   `date`, `foreignKey`) with `.nullable()`, `.primaryKey()`, `.autoIncrement()`,
   `.unique()`, `.default()`, `.autoNow()/.autoNowAdd()`.
-- `model()` / `Manager` — `all`, `filter`, `exclude`, `get`, `create`, `update`,
-  `delete`, `selectRelated`.
+- `model()` / `Manager` — `all`, `filter`, `exclude`, `get`, `count`, `create`,
+  `update`, `delete`, `selectRelated`.
 - `QuerySet` — lazy + immutable; thenable (awaiting it runs the query); `.compile()`
-  to SQL with no DB.
+  to SQL with no DB; `.orderBy('name', '-createdAt')`, `.limit(n)`, `.offset(n)`,
+  and `.count()` (SQL `COUNT(*)`, with `.compileCount()` for assertions).
 - Lookups: `exact`, `in`, `isnull`, `gt/gte/lt/lte`, `contains`, `icontains`,
   `startswith`, `endswith` (case-sensitivity matches Django on MySQL).
 - Relation traversal for FK fields by convention: `authorId` exposes `author`, so
@@ -35,6 +36,11 @@ the lazy QuerySet, Django-style lookups, and the request-scoped connection. Does
   targets and inflate joined columns into nested objects on each result row.
 - `withConnection` / `getConnection` / `createMysqlConnection`, and `COMPILE_ONLY`.
 - `atomic(fn)` — runs ORM work inside a transaction scoped to the current connection.
+- `mysqlConfigFromEnv(options?, env?)` — the single resolution path for database
+  configuration: explicit options > `TANGO_DATABASE_URL`/`DATABASE_URL` >
+  `TANGO_DB_*` variables > development defaults. Supports TLS (`TANGO_DB_SSL`)
+  and pool sizing (`TANGO_DB_POOL_SIZE`), and refuses development defaults when
+  `NODE_ENV=production`.
 
 ## Design patterns that matter here
 

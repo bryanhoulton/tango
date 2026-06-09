@@ -170,6 +170,64 @@ describe('QuerySet SQL compilation', () => {
     expect(parameters).toEqual(['%ada%'])
   })
 
+  it('compiles orderBy with ascending and descending keys', () => {
+    const { sql, parameters } = User.objects
+      .all()
+      .orderBy('name', '-age')
+      .compile()
+    expect(sql).toBe('select * from `users` order by `name` asc, `age` desc')
+    expect(parameters).toEqual([])
+  })
+
+  it('replaces previous ordering when orderBy is called again', () => {
+    const { sql } = User.objects.all().orderBy('name').orderBy('-id').compile()
+    expect(sql).toBe('select * from `users` order by `id` desc')
+  })
+
+  it('compiles limit and offset as bound parameters', () => {
+    const { sql, parameters } = User.objects
+      .all()
+      .orderBy('id')
+      .limit(10)
+      .offset(20)
+      .compile()
+    expect(sql).toBe('select * from `users` order by `id` asc limit ? offset ?')
+    expect(parameters).toEqual([10, 20])
+  })
+
+  it('emits an unlimited LIMIT when only offset is set (MySQL requires LIMIT)', () => {
+    const { sql, parameters } = User.objects.all().offset(5).compile()
+    expect(sql).toBe('select * from `users` limit ? offset ?')
+    expect(parameters).toEqual([Number.MAX_SAFE_INTEGER, 5])
+  })
+
+  it('rejects non-integer or negative limit/offset', () => {
+    expect(() => User.objects.all().limit(-1)).toThrow()
+    expect(() => User.objects.all().offset(1.5)).toThrow()
+  })
+
+  it('compiles count over the filtered set, ignoring ordering and slicing', () => {
+    const { sql, parameters } = User.objects
+      .filter({ age__gte: 18 })
+      .orderBy('name')
+      .limit(2)
+      .offset(4)
+      .compileCount()
+    expect(sql).toBe(
+      'select count(*) as `count` from `users` where `age` >= ?'
+    )
+    expect(parameters).toEqual([18])
+  })
+
+  it('compiles count with relation-filter joins preserved', () => {
+    const { sql } = Post.objects
+      .filter({ author__name__icontains: 'ada' })
+      .compileCount()
+    expect(sql).toBe(
+      'select count(*) as `count` from `posts` left join `users` as `author` on `posts`.`authorId` = `author`.`id` where `author`.`name` like ?'
+    )
+  })
+
   it('compiles nested selectRelated chains and aliases nested columns', () => {
     const { sql, parameters } = Book.objects
       .selectRelated('author__organization')

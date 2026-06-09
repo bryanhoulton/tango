@@ -1,9 +1,9 @@
 import { detailResponse, jsonResponse, type RequestContext } from '@tango-ts/http'
-import type { Authentication, Permission } from '@tango-ts/auth'
+import type { Authentication, MaybePromise, Permission } from '@tango-ts/auth'
 import { AuthenticationFailed } from '@tango-ts/auth'
 import type { Fields, InferSelect, InferUpdate, Lookups } from '@tango-ts/core-types'
 import { DoesNotExist, Field } from '@tango-ts/orm'
-import type { Model } from '@tango-ts/orm'
+import type { Model, OrderingKey, QuerySet } from '@tango-ts/orm'
 import type {
   ModelSerializerInstance,
   SerializerInstanceOptions,
@@ -111,10 +111,37 @@ export type AuthResult =
   | null
   | undefined
 
+/** Django-style ordering for a viewset: a field name, or `-field` for descending. */
+export type ViewSetOrdering<F extends Fields> =
+  | (keyof F & string)
+  | `-${keyof F & string}`
+
 export interface ModelViewSetOptions<F extends Fields, Out> {
   readonly model: Model<string, F>
   readonly serializer: ModelSerializerLike<F, Out>
+  /**
+   * Scope every action to a per-request queryset (Django's `get_queryset()`).
+   * `list` queries it, and detail actions 404 for rows outside it — out-of-scope
+   * rows simply do not exist for the caller. Defaults to `model.objects.all()`.
+   */
+  readonly queryset?: (
+    ctx: RequestContext
+  ) => QuerySet<InferSelect<F>, Lookups<F>>
+  /**
+   * Object-level permission (DRF's `has_object_permission`) for detail actions,
+   * checked after the row is fetched; denial is a 403. Permission classes in
+   * `permissions` may also implement `hasObjectPermission`.
+   */
+  readonly objectPermission?: (
+    ctx: RequestContext,
+    row: InferSelect<F>
+  ) => MaybePromise<boolean>
   readonly filters?: readonly (keyof Lookups<F> & string)[]
+  /**
+   * Default ordering applied to list responses. Paginated lists always have a
+   * deterministic order: this option when set, otherwise the primary key.
+   */
+  readonly ordering?: readonly ViewSetOrdering<F>[]
   readonly pagination?: {
     readonly pageSize: number
     readonly maxPageSize?: number
@@ -334,6 +361,47 @@ export class ModelViewSet<F extends Fields, Out> {
     return handler(authedCtx)
   }
 
+  private scopedQuery(ctx: RequestContext): QuerySet<InferSelect<F>, Lookups<F>> {
+    return this.options.queryset === undefined
+      ? this.options.model.objects.all()
+      : this.options.queryset(ctx)
+  }
+
+  /** Fetch one row by pk through the scoped queryset; out of scope = DoesNotExist. */
+  private getScopedObject(
+    ctx: RequestContext,
+    pkValue: string | number
+  ): Promise<InferSelect<F>> {
+    return this.scopedQuery(ctx).get({ [this.pkColumn]: pkValue } as Lookups<F>)
+  }
+
+  /**
+   * Object-level permission pass for detail actions: every permission class
+   * implementing `hasObjectPermission`, then the `objectPermission` option.
+   * Returns the 403 response on denial, undefined when allowed.
+   */
+  private async deniedForObject(
+    ctx: RequestContext,
+    row: InferSelect<F>
+  ): Promise<Response | undefined> {
+    for (const permission of this.options.permissions ?? []) {
+      if (typeof permission === 'function') {
+        continue
+      }
+      if (
+        permission.hasObjectPermission !== undefined &&
+        !(await permission.hasObjectPermission(ctx, row))
+      ) {
+        return detailResponse('Permission denied.', 403)
+      }
+    }
+    const objectPermission = this.options.objectPermission
+    if (objectPermission !== undefined && !(await objectPermission(ctx, row))) {
+      return detailResponse('Permission denied.', 403)
+    }
+    return undefined
+  }
+
   private filtersFromQuery(ctx: RequestContext): Lookups<F> {
     const allowed = new Set(this.options.filters ?? [])
     const filters: Record<string, unknown> = {}
@@ -349,32 +417,49 @@ export class ModelViewSet<F extends Fields, Out> {
     return filters as Lookups<F>
   }
 
-  private paginate(ctx: RequestContext, rows: Out[]): PaginationEnvelope<Out> {
-    const pagination = this.options.pagination
-    if (pagination === undefined) {
-      throw new Error('paginate() called without pagination configuration.')
+  private orderingKeys(): readonly OrderingKey<InferSelect<F>>[] {
+    const configured = this.options.ordering
+    if (configured !== undefined && configured.length > 0) {
+      return configured as readonly OrderingKey<InferSelect<F>>[]
     }
+    return [this.pkColumn as OrderingKey<InferSelect<F>>]
+  }
+
+  /**
+   * Pagination happens in SQL: one COUNT(*) plus one ordered LIMIT/OFFSET page.
+   * The table is never loaded into memory.
+   */
+  private async paginatedList(
+    ctx: RequestContext,
+    query: QuerySet<InferSelect<F>, Lookups<F>>,
+    pagination: NonNullable<ModelViewSetOptions<F, Out>['pagination']>
+  ): Promise<PaginationEnvelope<Out>> {
     const page = pageNumber(ctx)
     const size = pageSize(ctx, pagination)
     const start = (page - 1) * size
-    const results = rows.slice(start, start + size)
-    const next = start + size < rows.length ? pageUrl(ctx, page + 1) : null
+    const count = await query.count()
+    const rows = await query.orderBy(...this.orderingKeys()).limit(size).offset(start)
+    const results = rows.map((row) => this.options.serializer.serialize(row))
+    const next = start + size < count ? pageUrl(ctx, page + 1) : null
     const previous = page > 1 ? pageUrl(ctx, page - 1) : null
-    return { count: rows.length, next, previous, results }
+    return { count, next, previous, results }
   }
 
   async list(ctx: RequestContext): Promise<Response> {
     const filters = this.filtersFromQuery(ctx)
     const hasFilters = Object.keys(filters).length > 0
-    const rows = await (hasFilters
-      ? this.options.model.objects.filter(filters)
-      : this.options.model.objects.all())
-    const serialized = rows.map((row) => this.options.serializer.serialize(row))
-    return jsonResponse(
-      this.options.pagination === undefined
-        ? serialized
-        : this.paginate(ctx, serialized)
-    )
+    const base = this.scopedQuery(ctx)
+    const query = hasFilters ? base.filter(filters) : base
+    if (this.options.pagination !== undefined) {
+      return jsonResponse(
+        await this.paginatedList(ctx, query, this.options.pagination)
+      )
+    }
+    const rows =
+      this.options.ordering === undefined
+        ? await query
+        : await query.orderBy(...this.orderingKeys())
+    return jsonResponse(rows.map((row) => this.options.serializer.serialize(row)))
   }
 
   async retrieve(ctx: RequestContext): Promise<Response> {
@@ -385,9 +470,11 @@ export class ModelViewSet<F extends Fields, Out> {
     const pkField = this.options.model.fields[this.pkColumn] as Field
     const pkValue = coercePrimaryKey(id, pkField)
     try {
-      const row = await this.options.model.objects.get({
-        [this.pkColumn]: pkValue
-      } as Lookups<F>)
+      const row = await this.getScopedObject(ctx, pkValue)
+      const denied = await this.deniedForObject(ctx, row)
+      if (denied !== undefined) {
+        return denied
+      }
       return jsonResponse(this.options.serializer.serialize(row))
     } catch (err) {
       if (err instanceof DoesNotExist) {
@@ -432,6 +519,12 @@ export class ModelViewSet<F extends Fields, Out> {
     const pkField = this.options.model.fields[this.pkColumn] as Field
     const pkValue = coercePrimaryKey(id, pkField)
     try {
+      // Scope check first: a row outside the queryset 404s before any write.
+      const existing = await this.getScopedObject(ctx, pkValue)
+      const denied = await this.deniedForObject(ctx, existing)
+      if (denied !== undefined) {
+        return denied
+      }
       const row = await this.options.model.objects.update(
         { [this.pkColumn]: pkValue } as Lookups<F>,
         (serializer.validatedData ?? {}) as InferUpdate<F>
@@ -453,7 +546,11 @@ export class ModelViewSet<F extends Fields, Out> {
     const pkField = this.options.model.fields[this.pkColumn] as Field
     const pkValue = coercePrimaryKey(id, pkField)
     try {
-      await this.options.model.objects.get({ [this.pkColumn]: pkValue } as Lookups<F>)
+      const existing = await this.getScopedObject(ctx, pkValue)
+      const denied = await this.deniedForObject(ctx, existing)
+      if (denied !== undefined) {
+        return denied
+      }
       await this.options.model.objects.delete({ [this.pkColumn]: pkValue } as Lookups<F>)
       return new Response(null, { status: 204 })
     } catch (err) {

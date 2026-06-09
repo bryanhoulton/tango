@@ -21,6 +21,9 @@ database lookups; those stay explicit and pluggable.
 - `AllowAny`.
 - `IsAuthenticated`.
 - `IsAdminUser`.
+- `Permission.hasObjectPermission?(ctx, obj)` — optional object-level check
+  (DRF's `has_object_permission`), called by viewsets for detail actions after
+  the row is fetched; denial is a 403.
 
 ## Design patterns that matter here
 

@@ -34,6 +34,13 @@ describe('published CLI package', () => {
       const files = stdout.split('\n')
       expect(files).toContain('package/templates/default-project/package.json')
       expect(files).toContain('package/templates/default-project/tsconfig.json')
+      // Deployment assets must survive npm packing; dotfiles are stored with a
+      // __DOT__ prefix because npm mangles real dotfiles in tarballs.
+      expect(files).toContain('package/templates/default-project/Dockerfile')
+      expect(files).toContain('package/templates/default-project/__DOT__gitignore')
+      expect(files).toContain('package/templates/default-project/__DOT__dockerignore')
+      expect(files).toContain('package/templates/default-project/__DOT__env.example')
+      expect(files).toContain('package/templates/default-project/README.md')
     } finally {
       await rm(dir, { recursive: true, force: true })
     }

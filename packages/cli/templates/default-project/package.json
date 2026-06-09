@@ -7,6 +7,7 @@
     "clean": "rm -rf dist",
     "build": "tsc -p tsconfig.json",
     "serve": "yarn clean && yarn build && tango serve",
+    "start": "tango serve",
     "dev": "tango dev --handler ./dist/project.js --watch ./src --build \"yarn clean && yarn build\"",
     "makemigrations": "yarn clean && yarn build && tango makemigrations --app ./dist/apps/core/app.js --migrations-dir ./src/apps/core/migrations --name auto",
     "migrate": "yarn clean && yarn build && tango migrate --app ./dist/apps/core/app.js --migrations-dir ./dist/apps/core/migrations --database __PROJECT_DB_NAME__",

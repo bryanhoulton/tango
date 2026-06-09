@@ -1,0 +1,16 @@
+# Database connection. When NODE_ENV=production these are required — Tango
+# refuses to fall back to development defaults.
+TANGO_DB_HOST=127.0.0.1
+TANGO_DB_PORT=3307
+TANGO_DB_USER=root
+TANGO_DB_PASSWORD=tango
+TANGO_DB_NAME=__PROJECT_DB_NAME__
+
+# Or configure everything with one URL (overrides unset fields above):
+# TANGO_DATABASE_URL=mysql://user:password@host:3306/__PROJECT_DB_NAME__?ssl=true
+
+# TLS for managed MySQL (PlanetScale, RDS, Aiven, ...):
+# TANGO_DB_SSL=true
+
+# Connection pool size:
+# TANGO_DB_POOL_SIZE=10

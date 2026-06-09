@@ -14,7 +14,13 @@ import {
   type RenameHints,
   type SchemaSnapshot
 } from '@tango-ts/migrations'
-import { createMysqlConnection, type LooseDatabase, type TangoApp } from '@tango-ts/orm'
+import {
+  createMysqlConnection,
+  mysqlConfigFromEnv,
+  type LooseDatabase,
+  type MysqlConnectionConfig,
+  type TangoApp
+} from '@tango-ts/orm'
 import { sql, type Kysely } from 'kysely'
 import { serve, type DevServer, type WebHandler } from '@tango-ts/adapters'
 
@@ -102,7 +108,10 @@ export async function startProject(options: StartProjectOptions): Promise<void> 
   await copyTemplate('default-project', options.directory, {
     PROJECT_NAME: options.name,
     PROJECT_PACKAGE_NAME: packageNameFromProject(options.name),
-    PROJECT_DB_NAME: databaseNameFromProject(options.name)
+    PROJECT_DB_NAME: databaseNameFromProject(options.name),
+    // Dotfiles are stored as `__DOT__name` in the template because npm mangles
+    // real dotfiles (e.g. .gitignore) when packing the published tarball.
+    DOT: '.'
   })
 }
 
@@ -128,13 +137,7 @@ export interface MigrateAppOptions {
   readonly migrationsDir?: string
 }
 
-export interface MysqlConnectionOptions {
-  readonly host: string
-  readonly port: number
-  readonly user: string
-  readonly password: string
-  readonly database: string
-}
+export type MysqlConnectionOptions = MysqlConnectionConfig
 
 type ServerMysqlConnectionOptions = Omit<MysqlConnectionOptions, 'database'>
 
@@ -164,13 +167,9 @@ export const DEFAULT_SERVE_HANDLER_PATH = './dist/project.js'
 export function mysqlConnectionOptionsFromEnv(
   env: NodeJS.ProcessEnv = process.env
 ): MysqlConnectionOptions {
-  return {
-    host: env.TANGO_DB_HOST ?? '127.0.0.1',
-    port: Number(env.TANGO_DB_PORT ?? 3307),
-    user: env.TANGO_DB_USER ?? 'root',
-    password: env.TANGO_DB_PASSWORD ?? 'tango',
-    database: env.TANGO_DB_NAME ?? 'tango_test'
-  }
+  // One resolution path for the whole framework, including the fail-loud
+  // production behavior and TANGO_DATABASE_URL/TLS support.
+  return mysqlConfigFromEnv({}, env)
 }
 
 export async function ensureMysqlDatabase(
@@ -490,6 +489,74 @@ export async function serveProject(
   const host = options.host ?? '127.0.0.1'
   const port = options.port ?? 8000
   return serve(await loadHandler(handlerPath), { host, port })
+}
+
+export interface RunServerOptions extends ServeProjectOptions {
+  /** How long to wait for in-flight requests on shutdown before forcing close. */
+  readonly shutdownTimeoutMs?: number
+}
+
+async function disposeHandler(handler: WebHandler): Promise<void> {
+  const dispose = (handler as { dispose?: unknown }).dispose
+  if (typeof dispose !== 'function') {
+    return
+  }
+  try {
+    await (dispose as () => Promise<void>).call(handler)
+  } catch (err) {
+    console.error(`Failed to dispose project resources: ${errorMessage(err)}`)
+  }
+}
+
+function waitForShutdown(
+  devServer: DevServer,
+  handler: WebHandler,
+  timeoutMs: number
+): Promise<void> {
+  return new Promise((resolveShutdown) => {
+    let shuttingDown = false
+    const shutdown = (signal: NodeJS.Signals): void => {
+      if (shuttingDown) {
+        return
+      }
+      shuttingDown = true
+      console.log(`Received ${signal}; draining in-flight requests...`)
+      // In-flight requests get `timeoutMs` to finish; afterwards remaining
+      // sockets are destroyed so the process never hangs on a stuck request.
+      const force = setTimeout(() => {
+        devServer.server.closeAllConnections()
+      }, timeoutMs)
+      force.unref()
+      void devServer
+        .close()
+        .catch((err: unknown) => {
+          console.error(`Failed to close server: ${errorMessage(err)}`)
+        })
+        .then(() => disposeHandler(handler))
+        .then(() => {
+          clearTimeout(force)
+          resolveShutdown()
+        })
+    }
+    process.once('SIGINT', shutdown)
+    process.once('SIGTERM', shutdown)
+  })
+}
+
+/**
+ * Run the production server: serve the built handler, then block until
+ * SIGINT/SIGTERM, drain in-flight requests, and release the database pool.
+ * This is what `tango serve` executes.
+ */
+export async function runServer(options: RunServerOptions = {}): Promise<void> {
+  const handlerPath = options.handlerPath ?? DEFAULT_SERVE_HANDLER_PATH
+  const handler = await loadHandler(handlerPath)
+  const devServer = await serve(handler, {
+    host: options.host ?? '127.0.0.1',
+    port: options.port ?? 8000
+  })
+  console.log(`Tango server listening at ${devServer.url}`)
+  await waitForShutdown(devServer, handler, options.shutdownTimeoutMs ?? 10_000)
 }
 
 function errorMessage(err: unknown): string {

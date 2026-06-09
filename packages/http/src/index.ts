@@ -1,4 +1,23 @@
-export type HttpMethod = 'DELETE' | 'GET' | 'PATCH' | 'POST' | 'PUT'
+export type HttpMethod = 'DELETE' | 'GET' | 'OPTIONS' | 'PATCH' | 'POST' | 'PUT'
+
+export { consoleLogger, errorFields } from './logger.js'
+export type { LogFields, Logger, LogLevel } from './logger.js'
+export {
+  applyMiddleware,
+  bodyLimit,
+  cors,
+  requestLog,
+  securityHeaders
+} from './middleware.js'
+export type {
+  BodyLimitOptions,
+  CorsOptions,
+  HttpHandler,
+  Middleware,
+  NextHandler,
+  RequestLogOptions,
+  SecurityHeadersOptions
+} from './middleware.js'
 
 export interface RequestContext {
   readonly request: Request

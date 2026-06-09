@@ -24,10 +24,20 @@ HTTP primitives, permissions, authentication, or pagination yet.
   or `POST /users/:id/activate/`.
 - Per-action OpenAPI overrides for built-in and custom routes.
 - Configured query-param filters for list endpoints, ANDed together via the ORM.
-- Optional page/pageSize pagination envelope: `{ count, next, previous, results }`.
+- Optional page/pageSize pagination envelope: `{ count, next, previous, results }`,
+  executed in SQL (`COUNT(*)` + ordered `LIMIT`/`OFFSET`) — the table is never
+  loaded into memory.
+- Declarative `ordering: ['-createdAt']`; paginated lists always have a
+  deterministic order (configured ordering, or the primary key).
 - Auth and permission hooks (`authenticate`, `permissions`) before view logic.
 - Auth classes from `@tango-ts/auth` via `authentication: [...]`, including 401 vs 403
   behavior for missing/invalid credentials vs permission denial.
+- Queryset scoping via `queryset: (ctx) => Model.objects.filter({...})` (Django's
+  `get_queryset()`): `list` queries the scope and detail actions 404 for rows outside
+  it. Request filters compose on top of the scope and can never widen it.
+- Object-level permissions for detail actions, checked after the row is fetched and
+  before any write: permission classes implementing `hasObjectPermission`, plus the
+  `objectPermission: (ctx, row) => boolean` shorthand. Denial is a 403.
 - Serializer validation errors returned with status 400.
 - PATCH uses partial serializer validation, so omitted fields are not erased.
 - Malformed JSON returned as `{ detail: 'Malformed JSON.' }` with status 400.

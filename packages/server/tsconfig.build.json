@@ -8,6 +8,7 @@
   "include": ["src/**/*.ts"],
   "references": [
     { "path": "../adapters/tsconfig.build.json" },
+    { "path": "../http/tsconfig.build.json" },
     { "path": "../orm/tsconfig.build.json" },
     { "path": "../router/tsconfig.build.json" }
   ]

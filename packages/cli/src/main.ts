@@ -9,7 +9,7 @@ import {
   migrateApp,
   mysqlConnectionOptionsFromEnv,
   runDevServer,
-  serveProject,
+  runServer,
   startApp,
   startProject
 } from './index.js'
@@ -35,10 +35,14 @@ async function main(): Promise<void> {
 
   if (command === 'serve') {
     const handlerPath = valueAfter(args, '--handler')
-    const port = Number(valueAfter(args, '--port') ?? 8000)
-    const host = valueAfter(args, '--host') ?? '127.0.0.1'
-    const devServer = await serveProject({ handlerPath, host, port })
-    console.log(`Tango dev server listening at ${devServer.url}`)
+    const rawPort = valueAfter(args, '--port') ?? process.env.PORT ?? '8000'
+    const port = Number(rawPort)
+    if (!Number.isInteger(port) || port < 0) {
+      throw new Error(`Invalid port "${rawPort}".`)
+    }
+    const host = valueAfter(args, '--host') ?? process.env.HOST ?? '127.0.0.1'
+    // Blocks until SIGINT/SIGTERM, then drains requests and closes the DB pool.
+    await runServer({ handlerPath, host, port })
     return
   }
 

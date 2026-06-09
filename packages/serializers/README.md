@@ -20,6 +20,9 @@ views, routing, pagination, or permissions.
 - `serialize(row)` returns only configured fields with inferred output types.
 - `forInput(data)` is compile-time checked against writable model fields.
 - `forUnknownInput(payload)` validates request payloads at runtime.
+- `datetime`/`date` fields accept ISO 8601 strings over JSON (validated against
+  explicit patterns, not `new Date(...)` parsing) and are normalized to `Date`
+  for the ORM.
 - `isValid()`, `errors`, `validatedData`.
 - `save()` calls `Model.objects.create(...)` using validated data.
 

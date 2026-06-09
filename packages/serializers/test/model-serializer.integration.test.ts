@@ -23,6 +23,17 @@ const UserSerializer = modelSerializer(User, {
   readOnlyFields: ['id'] as const
 })
 
+const Event = model('serializer_events', {
+  id: f.int().primaryKey().autoIncrement(),
+  startsAt: f.datetime(),
+  day: f.date()
+})
+
+const EventSerializer = modelSerializer(Event, {
+  fields: ['id', 'startsAt', 'day'] as const,
+  readOnlyFields: ['id'] as const
+})
+
 let db: Kysely<LooseDatabase>
 
 beforeAll(async () => {
@@ -34,6 +45,7 @@ beforeAll(async () => {
     database: process.env.TANGO_DB_NAME ?? 'tango_test'
   })
   await sql`drop table if exists serializer_users`.execute(db)
+  await sql`drop table if exists serializer_events`.execute(db)
   await sql`
     create table serializer_users (
       id int primary key auto_increment,
@@ -42,11 +54,19 @@ beforeAll(async () => {
       name varchar(255) not null
     )
   `.execute(db)
+  await sql`
+    create table serializer_events (
+      id int primary key auto_increment,
+      startsAt datetime not null,
+      day date not null
+    )
+  `.execute(db)
 })
 
 afterAll(async () => {
   if (db !== undefined) {
     await sql`drop table if exists serializer_users`.execute(db)
+    await sql`drop table if exists serializer_events`.execute(db)
     await db.destroy()
   }
 })
@@ -71,6 +91,27 @@ describe('ModelSerializer.save against a real ORM connection', () => {
         age: null,
         name: 'Ada'
       })
+    })
+  })
+
+  it('persists ISO string datetime/date input as JSON clients send it', async () => {
+    await withConnection(db, async () => {
+      // Exactly what arrives over HTTP: strings, because JSON has no Date.
+      const serializer = EventSerializer.forUnknownInput({
+        startsAt: '2026-06-09T12:30:00Z',
+        day: '2026-06-09'
+      })
+
+      expect(serializer.isValid()).toBe(true)
+      const event = await serializer.save()
+
+      expect(event.id).toBeGreaterThan(0)
+      expect(event.startsAt).toBeInstanceOf(Date)
+      expect(event.startsAt.toISOString()).toBe('2026-06-09T12:30:00.000Z')
+      expect(event.day).toBeInstanceOf(Date)
+      expect(event.day.getFullYear()).toBe(2026)
+      expect(event.day.getMonth()).toBe(5)
+      expect(event.day.getDate()).toBe(9)
     })
   })
 })

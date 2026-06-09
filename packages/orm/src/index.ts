@@ -13,6 +13,13 @@ export type { HasManySpec, RelationMap, RelationTarget } from './relations.js'
 export { defineApp } from './registry.js'
 export type { AnyModel, TangoApp, TangoAppConfig } from './registry.js'
 export { QuerySet, parseLookup } from './queryset.js'
+export type { OrderingKey } from './queryset.js'
+export { mysqlConfigFromEnv } from './env.js'
+export type {
+  MysqlConnectionConfig,
+  MysqlEnvOptions,
+  MysqlSslConfig
+} from './env.js'
 export { DoesNotExist, MultipleObjectsReturned } from './errors.js'
 export {
   atomic,
