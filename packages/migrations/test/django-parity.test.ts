@@ -152,7 +152,9 @@ function assertParity(from: SchemaSnapshot, to: SchemaSnapshot): void {
   expect(ours).toEqual(theirs)
 }
 
-describe('autodetector matches Django (oracle)', () => {
+// The first oracle invocation may resolve and install Django via uv on a cold
+// cache (especially in CI), which can far exceed the default 5s test timeout.
+describe('autodetector matches Django (oracle)', { timeout: 120_000 }, () => {
   it('create table', () => {
     assertParity(emptySnapshot(), buildSnapshot([UserBase]))
   })

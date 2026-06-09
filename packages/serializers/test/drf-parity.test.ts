@@ -32,7 +32,9 @@ function drfErrors(payload: unknown): ValidationErrors {
   return JSON.parse(stdout) as ValidationErrors
 }
 
-describe('ModelSerializer validation parity with DRF', () => {
+// The first oracle invocation may resolve and install Django/DRF via uv on a
+// cold cache (especially in CI), which can far exceed the default 5s timeout.
+describe('ModelSerializer validation parity with DRF', { timeout: 120_000 }, () => {
   it('matches DRF required-field error envelope', () => {
     const payload = { email: 'ada@example.com' }
     const serializer = UserSerializer.forUnknownInput(payload)
