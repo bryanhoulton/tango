@@ -32,8 +32,8 @@ rendering, ORM behavior, or adapter internals.
 Scaffold usage:
 
 ```sh
-npx @tango-ts/cli startproject shop
-npx @tango-ts/cli startapp billing --directory src/apps/billing
+yarn dlx @tango-ts/cli startproject shop
+yarn tango startapp billing --directory src/apps/billing
 ```
 
 Scaffolds are copied from `templates/default-project` and `templates/default-app`, so

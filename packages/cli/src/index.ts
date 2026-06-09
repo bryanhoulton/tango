@@ -44,6 +44,16 @@ function applyTemplate(
   )
 }
 
+function packageNameFromProject(name: string): string {
+  return (
+    name
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'tango-project'
+  )
+}
+
 async function copyTemplate(
   templateName: string,
   destination: string,
@@ -81,7 +91,8 @@ export async function startApp(options: StartAppOptions): Promise<void> {
 
 export async function startProject(options: StartProjectOptions): Promise<void> {
   await copyTemplate('default-project', options.directory, {
-    PROJECT_NAME: options.name
+    PROJECT_NAME: options.name,
+    PROJECT_PACKAGE_NAME: packageNameFromProject(options.name)
   })
 }
 

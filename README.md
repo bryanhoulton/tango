@@ -1,50 +1,233 @@
-# @tango-ts/core
+# Tango
 
-**Django REST Framework, in TypeScript, for serverless.**
+**Django REST Framework, rebuilt in TypeScript, for serverless APIs.**
 
-Tango ports the Django + DRF developer experience to TypeScript — ORM, migrations,
-admin, auth, management commands, caching, and the full DRF layer — built on
-[Kysely](https://kysely.dev/) targeting MySQL / PlanetScale, and designed to run
-serverless on any platform.
+Tango is the product name. The npm packages currently live under the
+`@tango-ts/*` scope, but the framework should be described as Tango unless you are
+talking about a specific package.
 
-> Read [`DESIGN_PRINCIPLES.md`](./DESIGN_PRINCIPLES.md) before contributing. It is
-> the constitution of the project. **Zero `any`. TDD against a Django oracle.
-> Declarations, not logic. Serverless-first.**
+Tango exists for developers who want the Django + DRF way of building APIs:
+declare a model, derive validation and serialization from that model, register a
+viewset, and get typed CRUD endpoints without rewriting the same shape in five
+places. The core is TypeScript-first, MySQL/PlanetScale-oriented, and built around
+Web-standard `Request` / `Response` handlers so the same app can run locally today
+and behind serverless adapters later.
 
-## Package graph (planned)
+Tango is still early. The ORM, migrations, serializers, router, viewsets, auth
+primitives, OpenAPI generation, Node/local adapter, and CLI scaffolding exist.
+Admin, caching, and more deployment adapters are part of the direction, not the
+current quickstart surface.
 
-Dependencies point downward only; nothing depends upward.
+## Start A Project
 
-```
-@tango/core-types     phantom types, InferSelect/Insert/Lookups (pure types)
-        ↓
-@tango/orm            model(), fields, Manager, QuerySet, Kysely compilation (MySQL)
-        ↓
-@tango/migrations     schema diff, makemigrations / migrate, MySQL DDL
-        ↓
-@tango/serializers    DRF serializers, validation, inferred from models
-        ↓
-@tango/views          APIView, ViewSet, routers, pagination, Web Request/Response
-        ↓
-@tango/auth           stateless token/JWT auth, permissions
-@tango/cache          pluggable external backend (KV / Upstash)
-@tango/admin          auto-generated admin API + SPA
-@tango/cli            management commands (makemigrations, migrate, createsuperuser)
-        ↓
-@tango/adapters       node / vercel / lambda / cloudflare handlers
-```
-
-## Scripts
+Create a project with the CLI:
 
 ```sh
-yarn build        # tsc
-yarn typecheck    # tsc --noEmit
-yarn lint         # eslint — bans `any` and unsafe types
-yarn test         # vitest (added per package)
+yarn dlx @tango-ts/cli startproject shop
+cd shop
+yarn install
 ```
 
-## Documentation
+The generated project is intentionally small:
 
-- [`DESIGN_PRINCIPLES.md`](./DESIGN_PRINCIPLES.md) — the rules.
-- [`docs/FOLDER_README_TEMPLATE.md`](./docs/FOLDER_README_TEMPLATE.md) — every
-  meaningful folder gets a `README.md` from this template.
+```txt
+shop/
+  package.json
+  tsconfig.json
+  src/
+    project.ts
+    routes.ts
+    apps/
+      core/
+        app.ts
+        models.ts
+        serializers.ts
+        routes.ts
+        migrations/
+```
+
+Run it locally:
+
+```sh
+yarn serve
+```
+
+Then check the default health route:
+
+```sh
+curl http://127.0.0.1:8000/health/live/
+curl http://127.0.0.1:8000/core/health/live/
+```
+
+`src/project.ts` is the project entrypoint. It creates a Web handler by combining
+the root routes, nested apps, and the database connection:
+
+```ts
+import { defineProject, mysqlFromEnv } from '@tango-ts/server'
+
+import { app as coreApp } from './apps/core/app.js'
+import { routes as coreRoutes } from './apps/core/routes.js'
+import { routes } from './routes.js'
+
+export const project = defineProject({
+  name: 'shop',
+  database: mysqlFromEnv({ projectName: 'shop' }),
+  routes,
+  apps: [{ path: '/core', app: coreApp, routes: coreRoutes }]
+})
+
+export default project
+```
+
+## Key Concepts
+
+**Project:** the root Web handler. It wires database access, root routes, and
+nested apps together.
+
+**App:** a focused domain module with models, serializers, routes, and migrations.
+The starter project includes a `core` app. Add more apps as the project grows.
+
+**Model:** the single source of truth for persistence and types. Query shapes,
+insert shapes, filters, serializers, migrations, and OpenAPI metadata derive from
+the model.
+
+**Serializer:** the DRF-style boundary for validation and output. Application code
+does not hand-write DTO types for normal model resources.
+
+**Viewset:** the common CRUD behavior for a model resource. A model plus serializer
+is enough for list, retrieve, create, patch, and delete routes.
+
+**Router:** explicit route registration over Web-standard requests. There is no
+filesystem routing or Express-style request object.
+
+**Migrations:** generated from model snapshots and applied at deploy time or during
+local setup. They are never run during request handling.
+
+## Build The First Resource
+
+Start with a model in `src/apps/core/models.ts`:
+
+```ts
+import { f, model } from '@tango-ts/orm'
+
+export const Post = model('posts', {
+  id: f.int().primaryKey().autoIncrement(),
+  title: f.varchar(255),
+  body: f.text(),
+  published: f.boolean().default(false)
+})
+
+export const models = [Post] as const
+```
+
+Add a serializer in `src/apps/core/serializers.ts`:
+
+```ts
+import { modelSerializer } from '@tango-ts/serializers'
+
+import { Post } from './models.js'
+
+export const PostSerializer = modelSerializer(Post, {
+  fields: ['id', 'title', 'body', 'published'] as const,
+  readOnlyFields: ['id'] as const
+})
+```
+
+Register a viewset in `src/apps/core/routes.ts`:
+
+```ts
+import { defineRoutes, route } from '@tango-ts/router'
+import { modelViewSet } from '@tango-ts/views'
+
+import { Post } from './models.js'
+import { PostSerializer } from './serializers.js'
+
+export const routes = defineRoutes([
+  route('/posts', modelViewSet({ model: Post, serializer: PostSerializer }))
+])
+
+export default routes
+```
+
+Generate and apply the migration:
+
+```sh
+yarn makemigrations
+yarn migrate
+```
+
+By default, `mysqlFromEnv()` reads `TANGO_DB_HOST`, `TANGO_DB_PORT`,
+`TANGO_DB_USER`, `TANGO_DB_PASSWORD`, and `TANGO_DB_NAME`. If `TANGO_DB_NAME` is
+not set, the generated project derives a database name from the project name.
+
+Start the app and try the resource:
+
+```sh
+yarn serve
+curl http://127.0.0.1:8000/core/posts/
+curl -X POST http://127.0.0.1:8000/core/posts/ \
+  -H 'content-type: application/json' \
+  -d '{"title":"First post","body":"Hello from Tango."}'
+```
+
+## Add Another App
+
+Apps keep domains separate without creating another service. From inside a Tango
+project:
+
+```sh
+yarn tango startapp billing --directory src/apps/billing
+```
+
+Then import the new app and routes in `src/project.ts` and add it to `apps`:
+
+```ts
+import { app as billingApp } from './apps/billing/app.js'
+import { routes as billingRoutes } from './apps/billing/routes.js'
+
+export const project = defineProject({
+  name: 'shop',
+  database: mysqlFromEnv({ projectName: 'shop' }),
+  routes,
+  apps: [
+    { path: '/core', app: coreApp, routes: coreRoutes },
+    { path: '/billing', app: billingApp, routes: billingRoutes }
+  ]
+})
+```
+
+Each app owns its own migration directory. For now, generated scripts target the
+starter `core` app; additional apps should get their own migration scripts or CI
+steps.
+
+## Deployment
+
+Deployment guidance is not final yet. The intended shape is:
+
+1. Build the project with `yarn build`.
+2. Run `tango check` in CI to fail when model changes are missing migrations.
+3. Run `tango migrate` during deployment, before traffic reaches the new code.
+4. Export the project handler through the adapter for the target runtime.
+5. Provide database settings through `TANGO_DB_*` environment variables.
+
+The important constraint is that Tango apps are Web handlers and migrations are
+deploy-time commands. Request handling should stay stateless and should not open
+long-lived process-global database pools or run schema changes.
+
+## Working On Tango Itself
+
+This repository is the Tango monorepo. Package-level READMEs explain each package
+in more detail. Useful root commands:
+
+```sh
+yarn build
+yarn typecheck
+yarn lint
+yarn test
+yarn db:up
+yarn test:integration
+```
+
+Read [`DESIGN_PRINCIPLES.md`](./DESIGN_PRINCIPLES.md) before contributing. It is
+the project constitution: strict types, no `any`, serverless-first behavior,
+declarative APIs, and tests that overlap real production paths.

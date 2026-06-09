@@ -27,6 +27,18 @@ describe('scaffold commands', () => {
       await expect(readFile(join(projectDir, 'src/project.ts'), 'utf8')).resolves.toContain(
         "mysqlFromEnv({ projectName: 'shop' })"
       )
+      const packageJson = await readFile(join(projectDir, 'package.json'), 'utf8')
+      expect(packageJson).toContain('"name": "shop"')
+      expect(packageJson).toContain('"serve": "yarn build && tango serve')
+      expect(packageJson).toContain(
+        '--migrations-dir ./src/apps/core/migrations'
+      )
+      expect(packageJson).toContain(
+        '--migrations-dir ./dist/apps/core/migrations'
+      )
+      await expect(readFile(join(projectDir, 'tsconfig.json'), 'utf8')).resolves.toContain(
+        '"outDir": "dist"'
+      )
       await expect(readFile(join(projectDir, 'src/routes.ts'), 'utf8')).resolves.toContain(
         'defineRoutes'
       )

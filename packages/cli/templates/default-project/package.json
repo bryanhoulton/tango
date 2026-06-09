@@ -1,0 +1,25 @@
+{
+  "name": "__PROJECT_PACKAGE_NAME__",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "serve": "yarn build && tango serve --handler ./dist/project.js",
+    "makemigrations": "yarn build && tango makemigrations --app ./dist/apps/core/app.js --migrations-dir ./src/apps/core/migrations --name auto",
+    "migrate": "yarn build && tango migrate --app ./dist/apps/core/app.js --migrations-dir ./dist/apps/core/migrations",
+    "check": "yarn build && tango check --app ./dist/apps/core/app.js --migrations-dir ./dist/apps/core/migrations"
+  },
+  "dependencies": {
+    "@tango-ts/http": "^0.1.0",
+    "@tango-ts/orm": "^0.1.0",
+    "@tango-ts/router": "^0.1.0",
+    "@tango-ts/serializers": "^0.1.0",
+    "@tango-ts/server": "^0.1.0",
+    "@tango-ts/views": "^0.1.0"
+  },
+  "devDependencies": {
+    "@tango-ts/cli": "^0.1.0",
+    "typescript": "^6.0.3"
+  }
+}
