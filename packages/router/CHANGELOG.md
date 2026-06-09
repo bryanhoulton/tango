@@ -1,5 +1,11 @@
 # @tango-ts/router
 
+## 0.3.0
+
+### Patch Changes
+
+- @tango-ts/http@0.3.0
+
 ## 0.2.2
 
 ### Patch Changes

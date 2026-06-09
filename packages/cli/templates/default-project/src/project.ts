@@ -1,3 +1,4 @@
+import { addOpenApiRoute } from '@tango-ts/openapi'
 import {
   defineProject,
   mysqlFromEnv,
@@ -18,5 +19,8 @@ export const project = defineProject({
   routes,
   apps: [{ path: '/core', app: coreApp, routes: coreRoutes }]
 })
+
+// Serves the generated schema at GET /openapi.json.
+addOpenApiRoute(project)
 
 export default project

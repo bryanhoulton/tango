@@ -23,6 +23,9 @@ yarn makemigrations
 yarn migrate
 ```
 
+The OpenAPI schema is served at `GET /openapi.json` (wired in
+`src/project.ts` via `addOpenApiRoute`).
+
 ## Configuration
 
 All configuration comes from environment variables (see `.env.example`):
@@ -62,6 +65,10 @@ Notes for serverless MySQL:
   (`VERCEL=1` is detected); tune with `TANGO_DB_POOL_SIZE`.
 - Use a database that tolerates many connections (PlanetScale, or RDS behind
   RDS Proxy) — each warm function instance holds its own pool.
+- **PlanetScale (Vitess) does not support FOREIGN KEY constraints.** Declare
+  references with `f.foreignKey(() => Target, 'id', { dbConstraint: false })` —
+  joins and typing still work, but migrations skip the constraint DDL
+  (Django's `db_constraint=False`).
 - Run migrations from CI, **not** from Vercel's build: preview deployments
   share production env vars, and a PR branch must never alter the production
   schema. Example GitHub Action:

@@ -24,7 +24,9 @@ rendering, ORM behavior, or adapter internals.
   source migration snapshot, and writes a typed TS migration file.
 - `checkMigrations(...)` — fails when models changed without a migration.
 - `ensureMysqlDatabase(...)` — creates the configured MySQL database when the
-  server connection succeeds but the database does not exist yet.
+  server connection succeeds but the database does not exist yet. Carries the
+  configured TLS settings, and tolerates managed MySQL that forbids
+  `CREATE DATABASE` (PlanetScale) as long as the target database is reachable.
 - `migrateApp(...)` — applies generated migrations via the shared executor.
 - `loadHandler(path)` — loads a default/exported Web handler or router-like object
   with `handle(request)`.

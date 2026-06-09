@@ -95,7 +95,10 @@ export function buildTableSnapshot(model: SnapshotModel): TableSnapshot {
     if (column.unique) {
       uniques.push([name])
     }
-    if (field.spec.references !== undefined) {
+    // `dbConstraint: false` keeps the reference for joins/typing but emits no
+    // FOREIGN KEY DDL — required on databases that reject FK constraints
+    // (PlanetScale/Vitess).
+    if (field.spec.references !== undefined && field.spec.references.dbConstraint !== false) {
       const reference = field.spec.references
       const target = reference.target()
       const fk: ForeignKeySnapshot = {

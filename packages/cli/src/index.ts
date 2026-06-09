@@ -181,16 +181,33 @@ export async function ensureMysqlDatabase(
     db: Kysely<LooseDatabase>,
     database: string
   ) => Promise<unknown> = (db, database) =>
-    sql`create database if not exists ${sql.id(database)}`.execute(db)
+    sql`create database if not exists ${sql.id(database)}`.execute(db),
+  executeProbe: (db: Kysely<LooseDatabase>) => Promise<unknown> = (db) =>
+    sql`select 1`.execute(db)
 ): Promise<void> {
+  // The server-level connection must carry the same TLS settings as the real
+  // one — managed MySQL (PlanetScale, Aiven, ...) refuses plaintext entirely.
   const serverDb = createServerConnection({
     host: options.host,
     port: options.port,
     user: options.user,
-    password: options.password
+    password: options.password,
+    ...(options.ssl === undefined ? {} : { ssl: options.ssl })
   })
   try {
     await executeCreateDatabase(serverDb, options.database)
+  } catch (err) {
+    // Managed MySQL often forbids CREATE DATABASE (PlanetScale databases are
+    // branches, restricted RDS users lack the grant). If the target database
+    // is already reachable, the goal of this function is met.
+    const targetDb = createServerConnection(options)
+    try {
+      await executeProbe(targetDb)
+    } catch {
+      throw err
+    } finally {
+      await targetDb.destroy()
+    }
   } finally {
     await serverDb.destroy()
   }

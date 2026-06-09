@@ -55,6 +55,11 @@ const Book = model('books', {
   authorId: f.foreignKey(() => AuthorWithOrg, 'id', { onDelete: 'cascade' }),
   title: f.varchar(255)
 })
+const Feature = model('features', {
+  id: f.int().primaryKey().autoIncrement(),
+  name: f.varchar(255),
+  enabled: f.boolean().default(false)
+})
 
 let db: Kysely<LooseDatabase>
 
@@ -120,10 +125,18 @@ beforeAll(async () => {
       constraint books_authorId_fk foreign key (authorId) references authors_with_org(id) on delete cascade
     )
   `.execute(db)
+  await sql`
+    create table features (
+      id int primary key auto_increment,
+      name varchar(255) not null,
+      enabled tinyint(1) not null default 0
+    )
+  `.execute(db)
 })
 
 afterAll(async () => {
   if (db !== undefined) {
+    await sql`drop table if exists features`.execute(db)
     await sql`drop table if exists posts`.execute(db)
     await sql`drop table if exists books`.execute(db)
     await sql`drop table if exists authors_with_org`.execute(db)
@@ -195,6 +208,24 @@ describe('ORM against a real MySQL', () => {
     await withConnection(db, async () => {
       expect(await User.objects.count()).toBe(3)
       expect(await User.objects.filter({ age__gte: 18 }).count()).toBe(2)
+    })
+  })
+
+  it('reads boolean columns back as true/false, not tinyint 0/1', async () => {
+    await withConnection(db, async () => {
+      const on = await Feature.objects.create({ name: 'dark-mode', enabled: true })
+      const off = await Feature.objects.create({ name: 'beta-flow', enabled: false })
+
+      // toBe(true), not toBeTruthy(): tinyint comes back as 1 without the
+      // driver-level cast, and 1 is truthy — that's the exact bug this guards.
+      expect(on.enabled).toBe(true)
+      expect(off.enabled).toBe(false)
+
+      const fetched = await Feature.objects.get({ name: 'dark-mode' })
+      expect(fetched.enabled).toBe(true)
+
+      const enabledRows = await Feature.objects.filter({ enabled: true })
+      expect(enabledRows.map((row) => row.name)).toEqual(['dark-mode'])
     })
   })
 

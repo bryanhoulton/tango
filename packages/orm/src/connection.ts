@@ -61,7 +61,19 @@ export async function atomic<T>(fn: () => Promise<T>): Promise<T> {
 export function createMysqlConnection(
   options: PoolOptions
 ): Kysely<LooseDatabase> {
-  const pool = createPool(options) as unknown as MysqlDialectPool
+  const pool = createPool({
+    // MySQL has no boolean type — `f.boolean()` migrates to tinyint(1), and
+    // mysql2 returns tinyint as a number. Cast it back so rows match the
+    // types the field builders declare (true/false, not 0/1).
+    typeCast(field, next) {
+      if (field.type === 'TINY' && field.length === 1) {
+        const value = field.string()
+        return value === null ? null : value !== '0'
+      }
+      return next()
+    },
+    ...options
+  }) as unknown as MysqlDialectPool
   return new Kysely<LooseDatabase>({
     dialect: new MysqlDialect({ pool })
   })

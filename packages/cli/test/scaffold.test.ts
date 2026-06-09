@@ -70,6 +70,11 @@ describe('scaffold commands', () => {
       await expect(readFile(join(projectDir, 'src/project.ts'), 'utf8')).resolves.toContain(
         'middleware: [requestLog(), securityHeaders()]'
       )
+      // The OpenAPI schema endpoint is wired out of the box.
+      await expect(readFile(join(projectDir, 'src/project.ts'), 'utf8')).resolves.toContain(
+        'addOpenApiRoute(project)'
+      )
+      expect(packageJson).toContain('"@tango-ts/openapi"')
       // Deployment assets, with dotfiles renamed from their __DOT__ template names.
       await expect(readFile(join(projectDir, '.gitignore'), 'utf8')).resolves.toContain(
         'node_modules'

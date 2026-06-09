@@ -64,6 +64,7 @@ curl http://127.0.0.1:8000/core/health/live/
 the root routes, nested apps, and the database connection:
 
 ```ts
+import { addOpenApiRoute } from '@tango-ts/openapi'
 import { defineProject, mysqlFromEnv } from '@tango-ts/server'
 
 import { app as coreApp } from './apps/core/app.js'
@@ -76,6 +77,9 @@ export const project = defineProject({
   routes,
   apps: [{ path: '/core', app: coreApp, routes: coreRoutes }]
 })
+
+// Serves the generated OpenAPI 3.1 document at GET /openapi.json.
+addOpenApiRoute(project)
 
 export default project
 ```
@@ -234,6 +238,10 @@ Things to know:
   instance (tune with `TANGO_DB_POOL_SIZE`). Each warm instance holds its own
   pool, so prefer a database that tolerates many connections (PlanetScale, or
   RDS behind RDS Proxy).
+- **PlanetScale (Vitess) rejects FOREIGN KEY constraints.** Declare references
+  with `f.foreignKey(() => Target, 'id', { dbConstraint: false })` — joins and
+  typing keep working, migrations just skip the constraint DDL (Django's
+  `db_constraint=False`).
 - **Migrations run in CI, never in Vercel's build** — preview deployments share
   production env vars, and a PR branch must never alter the production schema.
   Run `tango check` on PRs and `tango migrate` on merge to main; the generated

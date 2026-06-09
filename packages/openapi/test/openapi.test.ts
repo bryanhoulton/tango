@@ -7,7 +7,7 @@ import { defineProject } from '@tango-ts/server'
 import { modelViewSet } from '@tango-ts/views'
 import { COMPILE_ONLY } from '@tango-ts/orm'
 
-import { generateOpenApi } from '../src/index.js'
+import { addOpenApiRoute, generateOpenApi } from '../src/index.js'
 
 const User = model('users', {
   id: f.int().primaryKey().autoIncrement(),
@@ -167,5 +167,48 @@ describe('generateOpenApi', () => {
 
     expect(schema.info).toEqual({ title: 'Commerce API', version: '0.0.0' })
     expect(schema.paths['/users/']?.get?.operationId).toBe('listUsers')
+  })
+})
+
+describe('addOpenApiRoute', () => {
+  it('serves the generated document from the project at /openapi.json', async () => {
+    const router = createRouter()
+    router.register('/users', modelViewSet({ model: User, serializer: UserSerializer }))
+    const project = defineProject({
+      name: 'Commerce API',
+      database: COMPILE_ONLY,
+      routes: router
+    })
+    addOpenApiRoute(project, { version: '1.2.3' })
+
+    const response = await project(
+      new Request('http://localhost/openapi.json', { method: 'GET' })
+    )
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('content-type')).toBe('application/json')
+    const document = (await response.json()) as Record<string, unknown>
+    expect(document['openapi']).toBe('3.1.0')
+    expect(document['info']).toEqual({ title: 'Commerce API', version: '1.2.3' })
+    const paths = document['paths'] as Record<string, unknown>
+    expect(Object.keys(paths)).toEqual(['/users/', '/users/{id}/'])
+  })
+
+  it('serves from a custom path', async () => {
+    const project = defineProject({
+      name: 'Commerce API',
+      database: COMPILE_ONLY
+    })
+    addOpenApiRoute(project, { path: '/api/schema.json' })
+
+    const response = await project(
+      new Request('http://localhost/api/schema.json', { method: 'GET' })
+    )
+    expect(response.status).toBe(200)
+
+    const missing = await project(
+      new Request('http://localhost/openapi.json', { method: 'GET' })
+    )
+    expect(missing.status).toBe(404)
   })
 })

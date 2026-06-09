@@ -261,6 +261,35 @@ function sourceInfo(
   }
 }
 
+export interface OpenApiRouteOptions extends OpenApiOptions {
+  /** Where to serve the document. Defaults to `/openapi.json`. */
+  readonly path?: string
+}
+
+/**
+ * Serve the project's OpenAPI document from the project itself (DRF's
+ * `get_schema_view`). Call after `defineProject` — the document is generated
+ * from the project's final route table on first request, then cached (routes
+ * are static after startup):
+ *
+ * ```ts
+ * export const project = defineProject({ ... })
+ * addOpenApiRoute(project, { version: '1.0.0' })
+ * ```
+ */
+export function addOpenApiRoute(
+  project: TangoProject,
+  options: OpenApiRouteOptions = {}
+): void {
+  let document: OpenApiDocument | undefined
+  project.routes.add('GET', options.path ?? '/openapi.json', () => {
+    document ??= generateOpenApi(project, options)
+    return new Response(JSON.stringify(document), {
+      headers: { 'content-type': 'application/json' }
+    })
+  })
+}
+
 export function generateOpenApi(
   source: Router | TangoProject,
   options?: OpenApiOptions

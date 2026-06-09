@@ -18,6 +18,9 @@ handling.
 - `generateOpenApi(router, { title, version })`.
 - `generateOpenApi(project)` defaults `info.title` from the project name and
   `info.version` to `0.0.0`.
+- `addOpenApiRoute(project, { path, title, version })` — serves the generated
+  document from the project itself (default `GET /openapi.json`), generated
+  lazily on first request and cached. This is what generated projects use.
 - Path generation for list/create/retrieve routes.
 - Path generation for custom `ModelViewSet` actions.
 - Component schemas inferred from model fields.
@@ -46,4 +49,5 @@ Everything exported from `src/index.ts`.
 
 - Unit (`test/openapi.test.ts`): path operations, operation IDs, path params, and
   component schemas derived from a registered `ModelViewSet`, including custom actions
-  and view-specific OpenAPI overrides.
+  and view-specific OpenAPI overrides; `addOpenApiRoute` serving the document through
+  the project handler at the default and custom paths.

@@ -35,6 +35,13 @@ export interface ReferenceSpec {
   readonly column: string
   readonly relationName?: string
   readonly onDelete?: ReferentialAction
+  /**
+   * When `false`, migrations emit a plain column without FOREIGN KEY DDL
+   * (Django's `db_constraint=False`). The reference still powers joins and
+   * typing — only the database-level constraint is skipped. Required on
+   * databases that reject FK constraints, like PlanetScale (Vitess).
+   */
+  readonly dbConstraint?: boolean
 }
 
 /** Runtime metadata describing a single column. Read by migrations and managers. */
@@ -142,7 +149,12 @@ export const f = {
   >(
     target: () => Target,
     column: Column,
-    options: { onDelete?: ReferentialAction; relationName?: string } = {}
+    options: {
+      onDelete?: ReferentialAction
+      relationName?: string
+      /** Set `false` to skip FOREIGN KEY DDL (required on PlanetScale/Vitess). */
+      dbConstraint?: boolean
+    } = {}
   ): Field<FieldValue<Target['fields'][Column]>, false, false, Target['fields']> =>
     new Field<FieldValue<Target['fields'][Column]>, false, false, Target['fields']>({
       ...BASE,
@@ -151,7 +163,8 @@ export const f = {
         target,
         column,
         onDelete: options.onDelete,
-        relationName: options.relationName
+        relationName: options.relationName,
+        dbConstraint: options.dbConstraint
       }
     })
 } as const

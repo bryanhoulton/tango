@@ -49,4 +49,28 @@ describe('buildSnapshot', () => {
       unique: false
     })
   })
+
+  it('captures foreign keys, except when dbConstraint is false', () => {
+    const Post = model('posts', {
+      id: f.int().primaryKey().autoIncrement(),
+      authorId: f.foreignKey(() => User, 'id', { onDelete: 'cascade' }),
+      // PlanetScale-style reference: joins/typing only, no FK DDL.
+      editorId: f.foreignKey(() => User, 'id', { dbConstraint: false })
+    })
+
+    const snapshot = buildSnapshot([User, Post])
+    const posts = snapshot.tables['posts']
+
+    expect(posts?.foreignKeys).toEqual([
+      {
+        name: 'posts_authorId_fk',
+        columns: ['authorId'],
+        referencesTable: 'users',
+        referencesColumns: ['id'],
+        onDelete: 'cascade'
+      }
+    ])
+    // The column itself still exists as a plain int.
+    expect(posts?.columns['editorId']?.type).toBe('int')
+  })
 })

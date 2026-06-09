@@ -1,5 +1,32 @@
 # @tango-ts/openapi
 
+## 0.3.0
+
+### Minor Changes
+
+- Production feedback from a real Vercel + PlanetScale deployment:
+
+  - `f.foreignKey(..., { dbConstraint: false })` (Django's `db_constraint=False`)
+    keeps the reference for joins/typing but skips FOREIGN KEY DDL — required on
+    PlanetScale (Vitess), which rejects FK constraints.
+  - `ensureMysqlDatabase` (used by `tango migrate`) now carries TLS settings onto
+    the server-level connection, and tolerates managed MySQL that forbids
+    `CREATE DATABASE` as long as the target database is reachable.
+  - Boolean columns now come back from MySQL as `true`/`false` instead of
+    tinyint `0`/`1` — a driver-level cast in `createMysqlConnection`, so the
+    ORM, viewsets, and serializer output all see real booleans.
+  - New `addOpenApiRoute(project)` in `@tango-ts/openapi` serves the generated
+    OpenAPI 3.1 document (default `GET /openapi.json`); generated projects now
+    wire it up out of the box.
+
+### Patch Changes
+
+- Updated dependencies
+  - @tango-ts/orm@0.3.0
+  - @tango-ts/router@0.3.0
+  - @tango-ts/server@0.3.0
+  - @tango-ts/views@0.3.0
+
 ## 0.2.2
 
 ### Patch Changes

@@ -19,7 +19,10 @@ the lazy QuerySet, Django-style lookups, and the request-scoped connection. Does
 
 - `f.*` — field builders (`int`, `float`, `varchar`, `text`, `boolean`, `datetime`,
   `date`, `foreignKey`) with `.nullable()`, `.primaryKey()`, `.autoIncrement()`,
-  `.unique()`, `.default()`, `.autoNow()/.autoNowAdd()`.
+  `.unique()`, `.default()`, `.autoNow()/.autoNowAdd()`. `f.foreignKey` accepts
+  `{ dbConstraint: false }` (Django's `db_constraint=False`) to keep the
+  reference for joins/typing while skipping FOREIGN KEY DDL — required on
+  PlanetScale (Vitess), which rejects FK constraints.
 - `model()` / `Manager` — `all`, `filter`, `exclude`, `get`, `count`, `create`,
   `update`, `delete`, `selectRelated`.
 - `QuerySet` — lazy + immutable; thenable (awaiting it runs the query); `.compile()`
