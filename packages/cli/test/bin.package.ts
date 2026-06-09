@@ -68,6 +68,9 @@ describe('published CLI package', () => {
       expect(packageJson).toContain('"name": "shop"')
       expect(packageJson).toContain('"serve": "yarn clean && yarn build && tango serve"')
       await expect(readFile(join(projectDir, 'tsconfig.json'), 'utf8')).resolves.toContain(
+        '"rootDir": "src"'
+      )
+      await expect(readFile(join(projectDir, 'tsconfig.json'), 'utf8')).resolves.toContain(
         '"outDir": "dist"'
       )
     } finally {

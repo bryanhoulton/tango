@@ -52,6 +52,9 @@ describe('scaffold commands', () => {
         'yarn clean && yarn build && tango check --app ./dist/apps/core/app.js --migrations-dir ./src/apps/core/migrations'
       )
       await expect(readFile(join(projectDir, 'tsconfig.json'), 'utf8')).resolves.toContain(
+        '"rootDir": "src"'
+      )
+      await expect(readFile(join(projectDir, 'tsconfig.json'), 'utf8')).resolves.toContain(
         '"outDir": "dist"'
       )
       await expect(readFile(join(projectDir, 'src/routes.ts'), 'utf8')).resolves.toContain(
