@@ -1,0 +1,50 @@
+# @tango-ts/serializers
+
+## Responsibility
+
+DRF-style serialization and validation. This package turns model definitions into
+typed serializers: configured output fields, typed input data, runtime validation,
+DRF-shaped error maps, and `save()` through the real ORM manager. It does not own HTTP
+views, routing, pagination, or permissions.
+
+## What it responds to
+
+- A model declared with `model(...)`.
+- Serializer configuration: `fields` and `readOnlyFields`.
+- Typed application input via `forInput(...)`, or request payloads via
+  `forUnknownInput(...)`.
+
+## Functionality
+
+- `modelSerializer(model, { fields, readOnlyFields })`.
+- `serialize(row)` returns only configured fields with inferred output types.
+- `forInput(data)` is compile-time checked against writable model fields.
+- `forUnknownInput(payload)` validates request payloads at runtime.
+- `isValid()`, `errors`, `validatedData`.
+- `save()` calls `Model.objects.create(...)` using validated data.
+
+## Design patterns that matter here
+
+- **Inferred types:** input/output shapes derive from the model field map and serializer
+  config. No hand-written DTO interfaces.
+- **Two input paths:** trusted application code uses typed `forInput`; untrusted request
+  bodies use `forUnknownInput`.
+- **Production overlap:** `save()` is integration-tested against real MySQL through the
+  ORM, not mocked.
+- **DRF oracle:** validation envelope parity is tested against real DRF for covered
+  cases.
+
+## Public contract
+
+Everything exported from `src/index.ts`: `modelSerializer`,
+`ModelSerializerInstance`, `ValidationErrors`, `SerializerInput`,
+`SerializerOutput`, and config/model interfaces.
+
+## Testing
+
+- Type-level (`test/model-serializer.test-d.ts`): configured fields, readonly input,
+  required fields, invalid model fields.
+- Unit (`test/model-serializer.test.ts`): serialization and validation behavior.
+- Parity (`test/drf-parity.test.ts`): basic required-field error envelope compared to
+  real DRF via `uv run`.
+- Integration (`test/model-serializer.integration.test.ts`): `save()` against real MySQL.

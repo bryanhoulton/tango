@@ -1,0 +1,5 @@
+# Tango pre-commit gate (DESIGN_PRINCIPLES.md §4).
+# Fails the commit on any `any`, unsafe type, or type error.
+echo "→ lint (no-any gate) + typecheck"
+yarn lint-staged
+yarn typecheck

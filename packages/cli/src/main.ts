@@ -1,0 +1,111 @@
+#!/usr/bin/env node
+import { serve } from '@tango-ts/adapters'
+import { createMysqlConnection } from '@tango-ts/orm'
+
+import {
+  checkMigrations,
+  loadApp,
+  loadHandler,
+  makemigrations,
+  migrateApp,
+  startApp,
+  startProject
+} from './index.js'
+
+function valueAfter(args: readonly string[], flag: string): string | undefined {
+  const idx = args.indexOf(flag)
+  return idx === -1 ? undefined : args[idx + 1]
+}
+
+async function main(): Promise<void> {
+  const [, , command, ...args] = process.argv
+
+  if (command === 'serve') {
+    const handlerPath = valueAfter(args, '--handler')
+    if (handlerPath === undefined) {
+      throw new Error('Missing --handler <path-to-web-handler-module>.')
+    }
+    const port = Number(valueAfter(args, '--port') ?? 8000)
+    const host = valueAfter(args, '--host') ?? '127.0.0.1'
+    const devServer = await serve(await loadHandler(handlerPath), { host, port })
+    console.log(`Tango dev server listening at ${devServer.url}`)
+    return
+  }
+
+  if (command === 'startproject') {
+    const name = args[0]
+    if (name === undefined) {
+      throw new Error('Missing project name.')
+    }
+    const directory = valueAfter(args, '--directory') ?? name
+    await startProject({ name, directory })
+    console.log(`Created Tango project ${name} at ${directory}`)
+    return
+  }
+
+  if (command === 'startapp') {
+    const name = args[0]
+    if (name === undefined) {
+      throw new Error('Missing app name.')
+    }
+    const directory = valueAfter(args, '--directory') ?? name
+    await startApp({ name, directory })
+    console.log(`Created Tango app ${name} at ${directory}`)
+    return
+  }
+
+  const appPath = valueAfter(args, '--app')
+  if (appPath === undefined) {
+    throw new Error('Missing --app <path-to-app-module>.')
+  }
+  const app = await loadApp(appPath)
+  const migrationsDir = valueAfter(args, '--migrations-dir')
+
+  if (command === 'makemigrations') {
+    const name = valueAfter(args, '--name') ?? 'auto'
+    const result = await makemigrations({ app, migrationsDir, name })
+    if (result.written) {
+      console.log(`Created ${result.path}`)
+    } else {
+      console.log('No changes detected.')
+    }
+    return
+  }
+
+  if (command === 'check') {
+    await checkMigrations({ app, migrationsDir })
+    console.log('No model changes detected.')
+    return
+  }
+
+  if (command === 'migrate') {
+    const db = createMysqlConnection({
+      host: process.env.TANGO_DB_HOST ?? '127.0.0.1',
+      port: Number(process.env.TANGO_DB_PORT ?? 3307),
+      user: process.env.TANGO_DB_USER ?? 'root',
+      password: process.env.TANGO_DB_PASSWORD ?? 'tango',
+      database: process.env.TANGO_DB_NAME ?? 'tango_test'
+    })
+    try {
+      const applied = await migrateApp({ app, db, migrationsDir })
+      console.log(
+        applied.length === 0
+          ? 'No migrations to apply.'
+          : `Applied migrations: ${applied.join(', ')}`
+      )
+    } finally {
+      await db.destroy()
+    }
+    return
+  }
+
+  throw new Error(
+    `Unknown command "${command ?? ''}". Use startproject, startapp, makemigrations, migrate, check, or serve.`
+  )
+}
+
+main().catch((err: unknown) => {
+  const message = err instanceof Error ? err.message : String(err)
+  console.error(message)
+  process.exitCode = 1
+})

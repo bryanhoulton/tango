@@ -1,0 +1,14 @@
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: tango
+      MYSQL_DATABASE: tango_test
+    ports:
+      # Host 3307 -> container 3306 to avoid clashing with a local MySQL.
+      - '3307:3306'
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost', '-ptango']
+      interval: 3s
+      timeout: 5s
+      retries: 30

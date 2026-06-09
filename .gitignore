@@ -1,7 +1,8 @@
-yarn-error.log
 node_modules
-bin
-build
-yarn.lock
-database.sqlite
 dist
+build
+bin
+yarn-error.log
+*.tsbuildinfo
+.DS_Store
+database.sqlite
