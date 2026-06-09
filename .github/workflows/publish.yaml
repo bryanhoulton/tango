@@ -21,6 +21,12 @@ jobs:
           node-version: 24
           registry-url: "https://registry.npmjs.org"
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@v6
+
       - run: yarn install --frozen-lockfile
       - run: yarn typecheck
       - run: yarn test
