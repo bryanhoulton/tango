@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   createMysqlConnection,
   DoesNotExist,
+  atomic,
   f,
   model,
   r,
@@ -187,6 +188,42 @@ describe('ORM against a real MySQL', () => {
     await withConnection(db, async () => {
       const everyone = await User.objects.all()
       expect(everyone.length).toBe(3)
+    })
+  })
+})
+
+describe('ORM atomic transactions against a real MySQL', () => {
+  it('rolls back all writes when the transaction callback throws', async () => {
+    await withConnection(db, async () => {
+      await expect(
+        atomic(async () => {
+          await User.objects.create({
+            email: 'rollback@example.com',
+            name: 'Rollback',
+            age: 1
+          })
+          throw new Error('rollback')
+        })
+      ).rejects.toThrow('rollback')
+
+      await expect(
+        User.objects.get({ email: 'rollback@example.com' })
+      ).rejects.toBeInstanceOf(DoesNotExist)
+    })
+  })
+
+  it('commits writes when the transaction callback succeeds', async () => {
+    await withConnection(db, async () => {
+      await atomic(async () => {
+        await User.objects.create({
+          email: 'commit@example.com',
+          name: 'Commit',
+          age: 2
+        })
+      })
+
+      const row = await User.objects.get({ email: 'commit@example.com' })
+      expect(row.name).toBe('Commit')
     })
   })
 })

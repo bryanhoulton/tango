@@ -158,4 +158,50 @@ describe('ModelViewSet over Web Request/Response', () => {
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ activated: '1' })
   })
+
+  it('partially updates a row with PATCH without erasing omitted fields', async () => {
+    const response = await handle(
+      new Request('https://example.test/users/1/', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name: 'Ada Updated' })
+      })
+    )
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      id: 1,
+      email: 'ada@example.com',
+      age: null,
+      name: 'Ada Updated'
+    })
+  })
+
+  it('deletes a row with DELETE and returns 204', async () => {
+    const created = await handle(
+      new Request('https://example.test/users/', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          email: 'delete@example.com',
+          age: 7,
+          name: 'Delete Me'
+        })
+      })
+    )
+    const createdBody = (await created.json()) as { id: number }
+
+    const response = await handle(
+      new Request(`https://example.test/users/${createdBody.id}/`, {
+        method: 'DELETE'
+      })
+    )
+
+    expect(response.status).toBe(204)
+
+    const detail = await handle(
+      new Request(`https://example.test/users/${createdBody.id}/`)
+    )
+    expect(detail.status).toBe(404)
+  })
 })

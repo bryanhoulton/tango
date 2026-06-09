@@ -1,10 +1,14 @@
 import { detailResponse, jsonResponse, type RequestContext } from '@tango-ts/http'
 import type { Authentication, Permission } from '@tango-ts/auth'
 import { AuthenticationFailed } from '@tango-ts/auth'
-import type { Fields, InferSelect, Lookups } from '@tango-ts/core-types'
+import type { Fields, InferSelect, InferUpdate, Lookups } from '@tango-ts/core-types'
 import { DoesNotExist, Field } from '@tango-ts/orm'
 import type { Model } from '@tango-ts/orm'
-import type { ModelSerializerInstance, ValidationErrors } from '@tango-ts/serializers'
+import type {
+  ModelSerializerInstance,
+  SerializerInstanceOptions,
+  ValidationErrors
+} from '@tango-ts/serializers'
 import type { Route } from '@tango-ts/router'
 
 export interface ViewSetRoute {
@@ -62,7 +66,10 @@ export interface ModelSerializerLike<F extends Fields, Out> {
   readonly fields?: readonly (keyof F & string)[]
   readonly readOnlyFields?: readonly (keyof F & string)[]
   serialize(row: InferSelect<F>): Out
-  forUnknownInput(input: unknown): ModelSerializerInstance<
+  forUnknownInput(
+    input: unknown,
+    options?: SerializerInstanceOptions
+  ): ModelSerializerInstance<
     F,
     readonly (keyof F & string)[],
     readonly (keyof F & string)[]
@@ -244,6 +251,18 @@ export class ModelViewSet<F extends Fields, Out> {
         path: joinPaths(basePath, '/:id/'),
         handler: (ctx) => this.dispatch(ctx, (authedCtx) => this.retrieve(authedCtx)),
         metadata: this.metadata('retrieve', this.options.openApi?.retrieve)
+      },
+      {
+        method: 'PATCH',
+        path: joinPaths(basePath, '/:id/'),
+        handler: (ctx) => this.dispatch(ctx, (authedCtx) => this.partialUpdate(authedCtx)),
+        metadata: this.metadata('custom', undefined, 'partialUpdate')
+      },
+      {
+        method: 'DELETE',
+        path: joinPaths(basePath, '/:id/'),
+        handler: (ctx) => this.dispatch(ctx, (authedCtx) => this.destroy(authedCtx)),
+        metadata: this.metadata('custom', undefined, 'destroy')
       }
     ]
     const customRoutes = (this.options.actions ?? []).map((action) => ({
@@ -391,6 +410,58 @@ export class ModelViewSet<F extends Fields, Out> {
     }
     const row = await serializer.save()
     return jsonResponse(this.options.serializer.serialize(row), { status: 201 })
+  }
+
+  async partialUpdate(ctx: RequestContext): Promise<Response> {
+    const id = ctx.params['id']
+    if (id === undefined) {
+      return detailResponse('Not found.', 404)
+    }
+    let payload: unknown
+    try {
+      payload = await ctx.json()
+    } catch {
+      return detailResponse('Malformed JSON.', 400)
+    }
+    const serializer = this.options.serializer.forUnknownInput(payload, {
+      partial: true
+    })
+    if (!serializer.isValid()) {
+      return jsonResponse(serializer.errors satisfies ValidationErrors, { status: 400 })
+    }
+    const pkField = this.options.model.fields[this.pkColumn] as Field
+    const pkValue = coercePrimaryKey(id, pkField)
+    try {
+      const row = await this.options.model.objects.update(
+        { [this.pkColumn]: pkValue } as Lookups<F>,
+        (serializer.validatedData ?? {}) as InferUpdate<F>
+      )
+      return jsonResponse(this.options.serializer.serialize(row))
+    } catch (err) {
+      if (err instanceof DoesNotExist) {
+        return detailResponse('Not found.', 404)
+      }
+      throw err
+    }
+  }
+
+  async destroy(ctx: RequestContext): Promise<Response> {
+    const id = ctx.params['id']
+    if (id === undefined) {
+      return detailResponse('Not found.', 404)
+    }
+    const pkField = this.options.model.fields[this.pkColumn] as Field
+    const pkValue = coercePrimaryKey(id, pkField)
+    try {
+      await this.options.model.objects.get({ [this.pkColumn]: pkValue } as Lookups<F>)
+      await this.options.model.objects.delete({ [this.pkColumn]: pkValue } as Lookups<F>)
+      return new Response(null, { status: 204 })
+    } catch (err) {
+      if (err instanceof DoesNotExist) {
+        return detailResponse('Not found.', 404)
+      }
+      throw err
+    }
   }
 }
 

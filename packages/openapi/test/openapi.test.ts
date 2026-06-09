@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest'
 import { f, model } from '@tango-ts/orm'
 import { createRouter } from '@tango-ts/router'
 import { modelSerializer } from '@tango-ts/serializers'
+import { defineProject } from '@tango-ts/server'
 import { modelViewSet } from '@tango-ts/views'
+import { COMPILE_ONLY } from '@tango-ts/orm'
 
 import { generateOpenApi } from '../src/index.js'
 
@@ -150,5 +152,20 @@ describe('generateOpenApi', () => {
         }
       }
     })
+  })
+
+  it('uses project metadata when generating OpenAPI from a named project', () => {
+    const router = createRouter()
+    router.register('/users', modelViewSet({ model: User, serializer: UserSerializer }))
+    const project = defineProject({
+      name: 'Commerce API',
+      database: COMPILE_ONLY,
+      routes: router
+    })
+
+    const schema = generateOpenApi(project)
+
+    expect(schema.info).toEqual({ title: 'Commerce API', version: '0.0.0' })
+    expect(schema.paths['/users/']?.get?.operationId).toBe('listUsers')
   })
 })

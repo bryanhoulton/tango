@@ -252,7 +252,10 @@ export async function migrateApp(options: MigrateAppOptions): Promise<string[]> 
   const files = await loadMigrations(dir)
   return migrate(
     options.db,
-    files.map((file) => file.migration)
+    files.map((file) => ({
+      ...file.migration,
+      name: `${options.app.name}.${file.migration.name}`
+    }))
   )
 }
 

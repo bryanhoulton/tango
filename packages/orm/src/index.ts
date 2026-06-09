@@ -15,12 +15,13 @@ export type { AnyModel, TangoApp, TangoAppConfig } from './registry.js'
 export { QuerySet, parseLookup } from './queryset.js'
 export { DoesNotExist, MultipleObjectsReturned } from './errors.js'
 export {
+  atomic,
   COMPILE_ONLY,
   createMysqlConnection,
   getConnection,
   withConnection
 } from './connection.js'
-export type { LooseDatabase, LooseRow } from './connection.js'
+export type { ActiveConnection, LooseDatabase, LooseRow } from './connection.js'
 
 // Re-export the inferred ORM types so consumers import them from one place.
 export type {

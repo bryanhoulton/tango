@@ -16,9 +16,11 @@ routing, views, ORM behavior, or migrations.
 ## Functionality
 
 - `defineServer({ app, routes, database })` -> Web handler.
-- `defineProject({ database, routes, apps })` -> Web handler for a root project with
-  nested apps.
+- `defineProject({ name, database, routes, apps })` -> named Web handler for a root
+  project with nested apps.
 - `mysqlFromEnv()` -> MySQL connection using `TANGO_DB_*` env vars.
+- `mysqlFromEnv({ projectName })` -> uses the project name as the fallback database
+  name when `TANGO_DB_NAME` is not configured.
 
 ## Design patterns that matter here
 
@@ -26,6 +28,8 @@ routing, views, ORM behavior, or migrations.
   owns the request/database scope wiring.
 - **Nested apps:** project code composes app declarations and route collections under
   path prefixes.
+- **Project metadata:** project names are carried by the returned handler and can be
+  reused by OpenAPI, database defaults, logging, and future tooling.
 - **Serverless-safe:** still returns a Web handler, so adapters can wrap it for local
   Node, Lambda, Vercel, or Workers.
 - **No hidden migrations:** server creation does not run migrations.

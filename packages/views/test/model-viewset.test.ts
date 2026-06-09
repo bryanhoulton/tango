@@ -23,7 +23,9 @@ describe('modelViewSet', () => {
     expect(viewset.routes('/users').map((route) => [route.method, route.path])).toEqual([
       ['GET', '/users/'],
       ['POST', '/users/'],
-      ['GET', '/users/:id/']
+      ['GET', '/users/:id/'],
+      ['PATCH', '/users/:id/'],
+      ['DELETE', '/users/:id/']
     ])
   })
 
@@ -53,6 +55,8 @@ describe('modelViewSet', () => {
       ['GET', '/users/'],
       ['POST', '/users/'],
       ['GET', '/users/:id/'],
+      ['PATCH', '/users/:id/'],
+      ['DELETE', '/users/:id/'],
       ['GET', '/users/export/'],
       ['POST', '/users/:id/activate/']
     ])

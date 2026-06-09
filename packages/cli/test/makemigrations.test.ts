@@ -3,9 +3,24 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
 import { defineApp, f, model } from '@tango-ts/orm'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
-import { checkMigrations, loadMigrations, makemigrations } from '../src/index.js'
+import {
+  checkMigrations,
+  loadMigrations,
+  makemigrations,
+  migrateApp
+} from '../src/index.js'
+
+const migrateMock = vi.hoisted(() => vi.fn())
+
+vi.mock('@tango-ts/migrations', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@tango-ts/migrations')>()
+  return {
+    ...actual,
+    migrate: migrateMock
+  }
+})
 
 async function tempMigrationsDir(): Promise<string> {
   return mkdtemp(join(tmpdir(), 'tango-migrations-'))
@@ -89,6 +104,30 @@ describe('makemigrations', () => {
         { kind: 'renameColumn', table: 'users', from: 'name', to: 'fullName' }
       ])
     } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('namespaces applied migration names by app to support nested projects', async () => {
+    const dir = await tempMigrationsDir()
+    try {
+      migrateMock.mockResolvedValueOnce(['blog.0001_init'])
+      const User = model('users', {
+        id: f.int().primaryKey().autoIncrement()
+      })
+      const app = defineApp({ name: 'blog', models: [User], migrationsDir: dir })
+      await makemigrations({ app, name: 'init' })
+
+      await expect(migrateApp({ app, db: {} as never })).resolves.toEqual([
+        'blog.0001_init'
+      ])
+
+      expect(migrateMock).toHaveBeenCalledWith(
+        {},
+        [expect.objectContaining({ name: 'blog.0001_init' })]
+      )
+    } finally {
+      migrateMock.mockReset()
       await rm(dir, { recursive: true, force: true })
     }
   })

@@ -66,7 +66,14 @@ export interface ModelSerializerDefinition<
   forInput(
     input: SerializerInput<F, Names, ReadOnlyNames>
   ): ModelSerializerInstance<F, Names, ReadOnlyNames>
-  forUnknownInput(input: unknown): ModelSerializerInstance<F, Names, ReadOnlyNames>
+  forUnknownInput(
+    input: unknown,
+    options?: SerializerInstanceOptions
+  ): ModelSerializerInstance<F, Names, ReadOnlyNames>
+}
+
+export interface SerializerInstanceOptions {
+  readonly partial?: boolean
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -127,7 +134,8 @@ export class ModelSerializerInstance<
     private readonly model: SerializerModel<F>,
     private readonly names: Names,
     private readonly readOnlyNames: ReadOnlyNames,
-    private readonly input: unknown
+    private readonly input: unknown,
+    private readonly options: SerializerInstanceOptions = {}
   ) {}
 
   get errors(): ValidationErrors {
@@ -170,7 +178,7 @@ export class ModelSerializerInstance<
     for (const name of writable) {
       const field = this.model.fields[name] as Field
       if (!Object.hasOwn(this.input, name)) {
-        if (!isOptionalInput(field)) {
+        if (this.options.partial !== true && !isOptionalInput(field)) {
           errors[name] = ['This field is required.']
         }
         continue
@@ -237,13 +245,15 @@ export function modelSerializer<
     },
 
     forUnknownInput(
-      input: unknown
+      input: unknown,
+      instanceOptions: SerializerInstanceOptions = {}
     ): ModelSerializerInstance<F, Names, ReadOnlyNames> {
       return new ModelSerializerInstance(
         model,
         options.fields,
         readOnlyFields,
-        input
+        input,
+        instanceOptions
       )
     }
   }

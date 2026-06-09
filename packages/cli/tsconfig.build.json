@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.package.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "tsBuildInfoFile": "dist/.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts"],
+  "references": [
+    { "path": "../adapters/tsconfig.build.json" },
+    { "path": "../migrations/tsconfig.build.json" },
+    { "path": "../orm/tsconfig.build.json" }
+  ]
+}

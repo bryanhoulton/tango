@@ -20,8 +20,8 @@ the lazy QuerySet, Django-style lookups, and the request-scoped connection. Does
 - `f.*` — field builders (`int`, `float`, `varchar`, `text`, `boolean`, `datetime`,
   `date`, `foreignKey`) with `.nullable()`, `.primaryKey()`, `.autoIncrement()`,
   `.unique()`, `.default()`, `.autoNow()/.autoNowAdd()`.
-- `model()` / `Manager` — `all`, `filter`, `exclude`, `get`, `create`,
-  `selectRelated`.
+- `model()` / `Manager` — `all`, `filter`, `exclude`, `get`, `create`, `update`,
+  `delete`, `selectRelated`.
 - `QuerySet` — lazy + immutable; thenable (awaiting it runs the query); `.compile()`
   to SQL with no DB.
 - Lookups: `exact`, `in`, `isnull`, `gt/gte/lt/lte`, `contains`, `icontains`,
@@ -34,6 +34,7 @@ the lazy QuerySet, Django-style lookups, and the request-scoped connection. Does
 - `selectRelated('author')` and `selectRelated('author__organization')` eager-load FK
   targets and inflate joined columns into nested objects on each result row.
 - `withConnection` / `getConnection` / `createMysqlConnection`, and `COMPILE_ONLY`.
+- `atomic(fn)` — runs ORM work inside a transaction scoped to the current connection.
 
 ## Design patterns that matter here
 
@@ -43,6 +44,8 @@ the lazy QuerySet, Django-style lookups, and the request-scoped connection. Does
 - **Lazy + immutable:** building never executes; chaining returns new QuerySets.
 - **Serverless (P5):** the connection is request-scoped via `AsyncLocalStorage`; no
   module-level mutable connection. `COMPILE_ONLY` is pure/immutable, so it is allowed.
+- **Atomic transactions:** `atomic(...)` rebinds the request-scoped connection to a
+  Kysely transaction for the callback, so normal manager/queryset calls participate.
 - **Declarative (P4):** the public surface is builders + config. Internal Kysely usage
   is the one place we bridge to a loosely-typed DB, isolated in `connection.ts`/`queryset.ts`.
 - **No `any`:** the internal bridge uses `unknown`-typed `LooseDatabase`, never `any`.
@@ -60,5 +63,6 @@ exported for adapters/tests but is not the user-facing API.
   that invalid lookups / wrong value types / unknown nested or reverse relations fail
   to compile.
 - Integration (`test/db.integration.test.ts`): real MySQL — create, filter, get,
-  nested relation traversal, reverse relation traversal, nested `selectRelated`,
-  thenable execution. Never skips when the DB is down; it fails loudly.
+  update/delete helpers, transaction commit/rollback, nested relation traversal,
+  reverse relation traversal, nested `selectRelated`, thenable execution. Never skips
+  when the DB is down; it fails loudly.

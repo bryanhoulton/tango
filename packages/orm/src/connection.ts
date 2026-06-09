@@ -6,7 +6,8 @@ import {
   MysqlAdapter,
   MysqlDialect,
   MysqlIntrospector,
-  MysqlQueryCompiler
+  MysqlQueryCompiler,
+  type Transaction
 } from 'kysely'
 import { createPool, type PoolOptions } from 'mysql2'
 
@@ -14,12 +15,14 @@ import { createPool, type PoolOptions } from 'mysql2'
 export type LooseRow = Record<string, unknown>
 /** The loosely-typed database Kysely operates on internally. */
 export type LooseDatabase = Record<string, LooseRow>
+export type ActiveConnection = Kysely<LooseDatabase> | Transaction<LooseDatabase>
+type MysqlDialectPool = ConstructorParameters<typeof MysqlDialect>[0]['pool']
 
 // Request-scoped connection. Using AsyncLocalStorage keeps `Model.objects` ergonomic
 // (no threading a `db` everywhere) while staying serverless-safe: the connection is
 // scoped to one invocation and never leaks across requests in a warm container
 // (DESIGN_PRINCIPLES.md P5). There is no module-level *mutable* connection.
-const storage = new AsyncLocalStorage<Kysely<LooseDatabase>>()
+const storage = new AsyncLocalStorage<ActiveConnection>()
 
 /** Run `fn` with `db` as the active connection for everything inside it. */
 export function withConnection<T>(
@@ -30,7 +33,7 @@ export function withConnection<T>(
 }
 
 /** Get the active connection, or throw if execution isn't inside `withConnection`. */
-export function getConnection(): Kysely<LooseDatabase> {
+export function getConnection(): ActiveConnection {
   const db = storage.getStore()
   if (db === undefined) {
     throw new Error(
@@ -40,12 +43,27 @@ export function getConnection(): Kysely<LooseDatabase> {
   return db
 }
 
+function canStartTransaction(
+  db: ActiveConnection
+): db is Kysely<LooseDatabase> {
+  return 'transaction' in db
+}
+
+export async function atomic<T>(fn: () => Promise<T>): Promise<T> {
+  const db = getConnection()
+  if (!canStartTransaction(db)) {
+    return fn()
+  }
+  return db.transaction().execute((trx) => storage.run(trx, fn))
+}
+
 /** Build a real MySQL connection from mysql2 pool options. */
 export function createMysqlConnection(
   options: PoolOptions
 ): Kysely<LooseDatabase> {
+  const pool = createPool(options) as unknown as MysqlDialectPool
   return new Kysely<LooseDatabase>({
-    dialect: new MysqlDialect({ pool: createPool(options) })
+    dialect: new MysqlDialect({ pool })
   })
 }
 

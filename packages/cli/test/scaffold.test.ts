@@ -21,6 +21,12 @@ describe('scaffold commands', () => {
       await expect(readFile(join(projectDir, 'src/project.ts'), 'utf8')).resolves.toContain(
         'defineProject'
       )
+      await expect(readFile(join(projectDir, 'src/project.ts'), 'utf8')).resolves.toContain(
+        "name: 'shop'"
+      )
+      await expect(readFile(join(projectDir, 'src/project.ts'), 'utf8')).resolves.toContain(
+        "mysqlFromEnv({ projectName: 'shop' })"
+      )
       await expect(readFile(join(projectDir, 'src/routes.ts'), 'utf8')).resolves.toContain(
         'defineRoutes'
       )

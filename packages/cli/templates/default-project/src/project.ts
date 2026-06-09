@@ -5,7 +5,8 @@ import { routes as coreRoutes } from './apps/core/routes.js'
 import { routes } from './routes.js'
 
 export const project = defineProject({
-  database: mysqlFromEnv(),
+  name: '__PROJECT_NAME__',
+  database: mysqlFromEnv({ projectName: '__PROJECT_NAME__' }),
   routes,
   apps: [{ path: '/core', app: coreApp, routes: coreRoutes }]
 })

@@ -2,6 +2,7 @@ import type {
   Fields,
   InferInsert,
   InferSelect,
+  InferUpdate,
   Lookups,
   Relations,
   SelectRelatedPath,
@@ -152,6 +153,34 @@ export class Manager<F extends Fields, R extends Relations = NoRelations> {
     }
 
     return data as unknown as InferSelect<F>
+  }
+
+  async update(
+    lookups: Lookups<F, R>,
+    data: InferUpdate<F>
+  ): Promise<InferSelect<F>> {
+    const db = getConnection()
+    let query = db.updateTable(this.tableName).set(data)
+    for (const [key, value] of Object.entries(lookups as Record<string, unknown>)) {
+      if (key.includes('__')) {
+        throw new Error('Manager.update currently supports exact lookups only.')
+      }
+      query = query.where(key, '=', value)
+    }
+    await query.execute()
+    return this.get(lookups)
+  }
+
+  async delete(lookups: Lookups<F, R>): Promise<void> {
+    const db = getConnection()
+    let query = db.deleteFrom(this.tableName)
+    for (const [key, value] of Object.entries(lookups as Record<string, unknown>)) {
+      if (key.includes('__')) {
+        throw new Error('Manager.delete currently supports exact lookups only.')
+      }
+      query = query.where(key, '=', value)
+    }
+    await query.execute()
   }
 }
 

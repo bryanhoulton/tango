@@ -1,5 +1,6 @@
 import { Field } from '@tango-ts/orm'
 import type { Router } from '@tango-ts/router'
+import type { TangoProject } from '@tango-ts/server'
 import type {
   ModelViewSetRouteMetadata,
   OpenApiOperationOverride,
@@ -12,6 +13,11 @@ import type {
 export interface OpenApiInfo {
   readonly title: string
   readonly version: string
+}
+
+export interface OpenApiOptions {
+  readonly title?: string
+  readonly version?: string
 }
 
 export interface OpenApiDocument {
@@ -237,11 +243,32 @@ function mergeOperation(
   }
 }
 
-export function generateOpenApi(router: Router, info: OpenApiInfo): OpenApiDocument {
+function isProject(source: Router | TangoProject): source is TangoProject {
+  return typeof source === 'function' && 'routes' in source
+}
+
+function sourceRoutes(source: Router | TangoProject): Router {
+  return isProject(source) ? source.routes : source
+}
+
+function sourceInfo(
+  source: Router | TangoProject,
+  options: OpenApiOptions | undefined
+): OpenApiInfo {
+  return {
+    title: options?.title ?? (isProject(source) ? source.name : 'Tango API'),
+    version: options?.version ?? '0.0.0'
+  }
+}
+
+export function generateOpenApi(
+  source: Router | TangoProject,
+  options?: OpenApiOptions
+): OpenApiDocument {
   const paths: Record<string, PathItem> = {}
   const schemas: Record<string, SchemaObject> = {}
 
-  for (const route of router.routes()) {
+  for (const route of sourceRoutes(source).routes()) {
     if (!isModelViewSetMetadata(route.metadata)) {
       continue
     }
@@ -260,7 +287,7 @@ export function generateOpenApi(router: Router, info: OpenApiInfo): OpenApiDocum
 
   return {
     openapi: '3.1.0',
-    info,
+    info: sourceInfo(source, options),
     paths,
     components: { schemas }
   }

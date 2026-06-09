@@ -3,11 +3,15 @@ import {
   type CompiledQuery,
   type Expression,
   type ExpressionBuilder,
-  type Kysely,
   type SqlBool
 } from 'kysely'
 
-import { COMPILE_ONLY, getConnection, type LooseDatabase } from './connection.js'
+import {
+  COMPILE_ONLY,
+  getConnection,
+  type ActiveConnection,
+  type LooseDatabase
+} from './connection.js'
 import { DoesNotExist, MultipleObjectsReturned } from './errors.js'
 import { Field } from './fields.js'
 import type { RelationSpec } from './model.js'
@@ -267,7 +271,7 @@ export class QuerySet<Row, Lk, Selectable extends string = never>
     )
   }
 
-  private build(db: Kysely<LooseDatabase>) {
+  private build(db: ActiveConnection) {
     const joinedRelations = this.relationsToJoin()
     let query =
       joinedRelations.length === 0

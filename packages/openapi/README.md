@@ -16,6 +16,8 @@ handling.
 ## Functionality
 
 - `generateOpenApi(router, { title, version })`.
+- `generateOpenApi(project)` defaults `info.title` from the project name and
+  `info.version` to `0.0.0`.
 - Path generation for list/create/retrieve routes.
 - Path generation for custom `ModelViewSet` actions.
 - Component schemas inferred from model fields.
@@ -29,6 +31,8 @@ handling.
   routes.
 - **Single source of truth:** schemas derive from the same model and serializer config
   used at runtime.
+- **Boundary with views:** `@tango-ts/views` owns lightweight metadata and per-action
+  override shapes; this package owns all OpenAPI document generation logic.
 - **OpenAPI as verification:** route/serializer/model declarations are introspectable,
   which will keep future API behavior honest.
 - **Override escape hatch:** overridden handlers/custom actions can still publish exact
