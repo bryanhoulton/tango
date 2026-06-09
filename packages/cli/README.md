@@ -23,6 +23,8 @@ rendering, ORM behavior, or adapter internals.
 - `makemigrations(...)` — builds the current model snapshot, diffs from the latest
   source migration snapshot, and writes a typed TS migration file.
 - `checkMigrations(...)` — fails when models changed without a migration.
+- `ensureMysqlDatabase(...)` — creates the configured MySQL database when the
+  server connection succeeds but the database does not exist yet.
 - `migrateApp(...)` — applies generated migrations via the shared executor.
 - `loadHandler(path)` — loads a default/exported Web handler or router-like object
   with `handle(request)`.
@@ -75,6 +77,8 @@ export default router
 - **Typed migration files:** generated files export `migration` and `snapshotAfter`.
 - **Source migration truth:** generated projects read/check/write migrations in `src`,
   then clean and build before running compiled migrations from `dist`.
+- **Database creation before migrate:** `tango migrate` connects at the server level,
+  creates the target database if needed, then reconnects to that database.
 - **Web handler boundary:** `serve` loads a Web handler and delegates Node IO to
   `@tango-ts/adapters`.
 - **Template-based scaffolding:** `startproject` and `startapp` copy real template

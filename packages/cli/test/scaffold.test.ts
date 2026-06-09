@@ -46,7 +46,7 @@ describe('scaffold commands', () => {
         'yarn clean && yarn build && tango makemigrations --app ./dist/apps/core/app.js --migrations-dir ./src/apps/core/migrations --name auto'
       )
       expect(parsedPackageJson.scripts['migrate']).toBe(
-        'yarn clean && yarn build && tango migrate --app ./dist/apps/core/app.js --migrations-dir ./dist/apps/core/migrations'
+        'yarn clean && yarn build && tango migrate --app ./dist/apps/core/app.js --migrations-dir ./dist/apps/core/migrations --database shop'
       )
       expect(parsedPackageJson.scripts['check']).toBe(
         'yarn clean && yarn build && tango check --app ./dist/apps/core/app.js --migrations-dir ./src/apps/core/migrations'

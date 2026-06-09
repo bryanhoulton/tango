@@ -14,9 +14,8 @@ import {
   type RenameHints,
   type SchemaSnapshot
 } from '@tango-ts/migrations'
-import type { TangoApp } from '@tango-ts/orm'
-import type { Kysely } from 'kysely'
-import type { LooseDatabase } from '@tango-ts/orm'
+import { createMysqlConnection, type LooseDatabase, type TangoApp } from '@tango-ts/orm'
+import { sql, type Kysely } from 'kysely'
 import { serve, type DevServer, type WebHandler } from '@tango-ts/adapters'
 
 export interface StartProjectOptions {
@@ -54,6 +53,14 @@ function packageNameFromProject(name: string): string {
       .replace(/[^a-z0-9._-]+/g, '-')
       .replace(/^-+|-+$/g, '') || 'tango-project'
   )
+}
+
+function databaseNameFromProject(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'tango'
 }
 
 async function copyTemplate(
@@ -94,7 +101,8 @@ export async function startApp(options: StartAppOptions): Promise<void> {
 export async function startProject(options: StartProjectOptions): Promise<void> {
   await copyTemplate('default-project', options.directory, {
     PROJECT_NAME: options.name,
-    PROJECT_PACKAGE_NAME: packageNameFromProject(options.name)
+    PROJECT_PACKAGE_NAME: packageNameFromProject(options.name),
+    PROJECT_DB_NAME: databaseNameFromProject(options.name)
   })
 }
 
@@ -120,6 +128,16 @@ export interface MigrateAppOptions {
   readonly migrationsDir?: string
 }
 
+export interface MysqlConnectionOptions {
+  readonly host: string
+  readonly port: number
+  readonly user: string
+  readonly password: string
+  readonly database: string
+}
+
+type ServerMysqlConnectionOptions = Omit<MysqlConnectionOptions, 'database'>
+
 export interface LoadHandlerOptions {
   readonly cacheBust?: string
 }
@@ -142,6 +160,42 @@ export interface DevServerOptions {
 const DEFAULT_BUILD_COMMAND = 'yarn build'
 const DEFAULT_WATCH_DIRS = ['src'] as const
 export const DEFAULT_SERVE_HANDLER_PATH = './dist/project.js'
+
+export function mysqlConnectionOptionsFromEnv(
+  env: NodeJS.ProcessEnv = process.env
+): MysqlConnectionOptions {
+  return {
+    host: env.TANGO_DB_HOST ?? '127.0.0.1',
+    port: Number(env.TANGO_DB_PORT ?? 3307),
+    user: env.TANGO_DB_USER ?? 'root',
+    password: env.TANGO_DB_PASSWORD ?? 'tango',
+    database: env.TANGO_DB_NAME ?? 'tango_test'
+  }
+}
+
+export async function ensureMysqlDatabase(
+  options: MysqlConnectionOptions,
+  createServerConnection: (
+    options: ServerMysqlConnectionOptions
+  ) => Kysely<LooseDatabase> = createMysqlConnection,
+  executeCreateDatabase: (
+    db: Kysely<LooseDatabase>,
+    database: string
+  ) => Promise<unknown> = (db, database) =>
+    sql`create database if not exists ${sql.id(database)}`.execute(db)
+): Promise<void> {
+  const serverDb = createServerConnection({
+    host: options.host,
+    port: options.port,
+    user: options.user,
+    password: options.password
+  })
+  try {
+    await executeCreateDatabase(serverDb, options.database)
+  } finally {
+    await serverDb.destroy()
+  }
+}
 
 function migrationsDirFor(app: TangoApp, explicit?: string): string {
   const dir = explicit ?? app.migrationsDir

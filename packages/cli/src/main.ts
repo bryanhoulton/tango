@@ -3,9 +3,11 @@ import { createMysqlConnection } from '@tango-ts/orm'
 
 import {
   checkMigrations,
+  ensureMysqlDatabase,
   loadApp,
   makemigrations,
   migrateApp,
+  mysqlConnectionOptionsFromEnv,
   runDevServer,
   serveProject,
   startApp,
@@ -104,13 +106,13 @@ async function main(): Promise<void> {
   }
 
   if (command === 'migrate') {
-    const db = createMysqlConnection({
-      host: process.env.TANGO_DB_HOST ?? '127.0.0.1',
-      port: Number(process.env.TANGO_DB_PORT ?? 3307),
-      user: process.env.TANGO_DB_USER ?? 'root',
-      password: process.env.TANGO_DB_PASSWORD ?? 'tango',
-      database: process.env.TANGO_DB_NAME ?? 'tango_test'
-    })
+    const database = valueAfter(args, '--database')
+    const dbOptions = {
+      ...mysqlConnectionOptionsFromEnv(),
+      ...(database === undefined ? {} : { database })
+    }
+    await ensureMysqlDatabase(dbOptions)
+    const db = createMysqlConnection(dbOptions)
     try {
       const applied = await migrateApp({ app, db, migrationsDir })
       console.log(
