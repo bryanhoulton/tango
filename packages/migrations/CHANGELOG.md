@@ -1,5 +1,12 @@
 # @tango-ts/migrations
 
+## 0.1.1
+
+### Patch Changes
+
+- @tango-ts/core-types@0.1.1
+- @tango-ts/orm@0.1.1
+
 ## 0.1.0
 
 ### Minor Changes

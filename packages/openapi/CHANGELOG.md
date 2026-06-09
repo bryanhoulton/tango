@@ -1,5 +1,14 @@
 # @tango-ts/openapi
 
+## 0.1.1
+
+### Patch Changes
+
+- @tango-ts/orm@0.1.1
+- @tango-ts/router@0.1.1
+- @tango-ts/server@0.1.1
+- @tango-ts/views@0.1.1
+
 ## 0.1.0
 
 ### Minor Changes
