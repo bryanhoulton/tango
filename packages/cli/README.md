@@ -21,11 +21,13 @@ rendering, ORM behavior, or adapter internals.
 - `loadApp(path)` — dynamic app-module loading for the command wrapper.
 - `loadMigrations(dir)` — loads generated TS/JS migration files.
 - `makemigrations(...)` — builds the current model snapshot, diffs from the latest
-  migration snapshot, and writes a typed TS migration file.
+  source migration snapshot, and writes a typed TS migration file.
 - `checkMigrations(...)` — fails when models changed without a migration.
 - `migrateApp(...)` — applies generated migrations via the shared executor.
 - `loadHandler(path)` — loads a default/exported Web handler or router-like object
   with `handle(request)`.
+- `runDevServer(...)` — watches source files, runs the configured build command, and
+  reloads the built handler after successful rebuilds.
 - `startProject(...)` — copies the default project template to a target directory.
 - `startApp(...)` — copies the default app template to a target directory.
 
@@ -42,8 +44,12 @@ the generated layout is easy to inspect and evolve.
 Local dev server usage:
 
 ```sh
+tango serve
 tango serve --handler ./dist/server.js --host 127.0.0.1 --port 8000
+tango dev --handler ./dist/server.js --watch ./src --build "yarn clean && yarn build"
 ```
+
+In generated projects, `tango serve` defaults to `./dist/project.js`.
 
 The handler module can export a Web handler:
 
@@ -67,6 +73,8 @@ export default router
   provided. Interactive prompting will sit on top of the same `renames` option.
 - **Deploy-time only:** `migrate` is for CI/CD or local dev, never request handling.
 - **Typed migration files:** generated files export `migration` and `snapshotAfter`.
+- **Source migration truth:** generated projects read/check/write migrations in `src`,
+  then clean and build before running compiled migrations from `dist`.
 - **Web handler boundary:** `serve` loads a Web handler and delegates Node IO to
   `@tango-ts/adapters`.
 - **Template-based scaffolding:** `startproject` and `startapp` copy real template

@@ -18,6 +18,27 @@ async function readPackageJson(): Promise<PackageJson> {
 }
 
 describe('published CLI package', () => {
+  it('packs the default project config templates', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'tango-cli-pack-'))
+    try {
+      const tarball = join(dir, 'tango-cli.tgz')
+      await execFileAsync('yarn', [
+        '--cwd',
+        resolve('packages/cli'),
+        'pack',
+        '--filename',
+        tarball
+      ])
+
+      const { stdout } = await execFileAsync('tar', ['-tf', tarball])
+      const files = stdout.split('\n')
+      expect(files).toContain('package/templates/default-project/package.json')
+      expect(files).toContain('package/templates/default-project/tsconfig.json')
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
   it('runs the compiled tango bin to start a project', async () => {
     const pkg = await readPackageJson()
     const bin = pkg.bin?.['tango']
@@ -42,6 +63,12 @@ describe('published CLI package', () => {
       )
       await expect(readFile(join(projectDir, 'src/apps/core/routes.ts'), 'utf8')).resolves.toContain(
         "route('GET', '/health/live/'"
+      )
+      const packageJson = await readFile(join(projectDir, 'package.json'), 'utf8')
+      expect(packageJson).toContain('"name": "shop"')
+      expect(packageJson).toContain('"serve": "yarn clean && yarn build && tango serve"')
+      await expect(readFile(join(projectDir, 'tsconfig.json'), 'utf8')).resolves.toContain(
+        '"outDir": "dist"'
       )
     } finally {
       await rm(dir, { recursive: true, force: true })

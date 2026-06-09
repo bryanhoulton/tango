@@ -1,3 +1,5 @@
+import { spawn } from 'node:child_process'
+import { watch as watchFiles, type FSWatcher } from 'node:fs'
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import { basename, dirname, extname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -15,7 +17,7 @@ import {
 import type { TangoApp } from '@tango-ts/orm'
 import type { Kysely } from 'kysely'
 import type { LooseDatabase } from '@tango-ts/orm'
-import type { WebHandler } from '@tango-ts/adapters'
+import { serve, type DevServer, type WebHandler } from '@tango-ts/adapters'
 
 export interface StartProjectOptions {
   readonly name: string
@@ -118,6 +120,29 @@ export interface MigrateAppOptions {
   readonly migrationsDir?: string
 }
 
+export interface LoadHandlerOptions {
+  readonly cacheBust?: string
+}
+
+export interface ServeProjectOptions {
+  readonly handlerPath?: string
+  readonly host?: string
+  readonly port?: number
+}
+
+export interface DevServerOptions {
+  readonly handlerPath: string
+  readonly host?: string
+  readonly port?: number
+  readonly watchDirs?: readonly string[]
+  readonly buildCommand?: string
+  readonly debounceMs?: number
+}
+
+const DEFAULT_BUILD_COMMAND = 'yarn build'
+const DEFAULT_WATCH_DIRS = ['src'] as const
+export const DEFAULT_SERVE_HANDLER_PATH = './dist/project.js'
+
 function migrationsDirFor(app: TangoApp, explicit?: string): string {
   const dir = explicit ?? app.migrationsDir
   if (dir === undefined) {
@@ -145,7 +170,10 @@ async function migrationFiles(dir: string): Promise<string[]> {
   try {
     const entries = await readdir(dir)
     return entries
-      .filter((entry) => ['.js', '.mjs', '.ts'].includes(extname(entry)))
+      .filter(
+        (entry) =>
+          !entry.endsWith('.d.ts') && ['.js', '.mjs', '.ts'].includes(extname(entry))
+      )
       .sort((a, b) => a.localeCompare(b))
       .map((entry) => join(dir, entry))
   } catch (err) {
@@ -157,20 +185,98 @@ async function migrationFiles(dir: string): Promise<string[]> {
   }
 }
 
-export async function loadMigrations(dir: string): Promise<MigrationFile[]> {
-  const files = await migrationFiles(resolve(dir))
-  const loaded: MigrationFile[] = []
-  for (const file of files) {
-    const mod = (await import(pathToFileURL(file).href)) as Record<string, unknown>
-    if (!isMigrationFile(mod)) {
+function jsonObjectEnd(source: string, start: number): number {
+  if (source[start] !== '{') {
+    throw new Error('Expected generated migration export to be a JSON object.')
+  }
+
+  let depth = 0
+  let inString = false
+  let escaped = false
+
+  for (let idx = start; idx < source.length; idx += 1) {
+    const char = source[idx]
+    if (inString) {
+      if (escaped) {
+        escaped = false
+      } else if (char === '\\') {
+        escaped = true
+      } else if (char === '"') {
+        inString = false
+      }
+      continue
+    }
+
+    if (char === '"') {
+      inString = true
+    } else if (char === '{') {
+      depth += 1
+    } else if (char === '}') {
+      depth -= 1
+      if (depth === 0) {
+        return idx + 1
+      }
+    }
+  }
+
+  throw new Error('Generated migration export has an unterminated JSON object.')
+}
+
+function parseGeneratedExport(source: string, exportName: string): unknown {
+  const marker = `export const ${exportName}`
+  const exportIdx = source.indexOf(marker)
+  if (exportIdx === -1) {
+    throw new Error(`Generated migration file is missing ${exportName}.`)
+  }
+
+  const equalsIdx = source.indexOf('=', exportIdx + marker.length)
+  if (equalsIdx === -1) {
+    throw new Error(`Generated migration export ${exportName} is missing "=".`)
+  }
+
+  const start = source.slice(equalsIdx + 1).search(/\S/)
+  if (start === -1) {
+    throw new Error(`Generated migration export ${exportName} is empty.`)
+  }
+
+  const valueStart = equalsIdx + 1 + start
+  const valueEnd = jsonObjectEnd(source, valueStart)
+  return JSON.parse(source.slice(valueStart, valueEnd))
+}
+
+async function loadMigrationFile(file: string): Promise<MigrationFile> {
+  if (extname(file) === '.ts') {
+    const source = await readFile(file, 'utf8')
+    const migration = parseGeneratedExport(source, 'migration')
+    const snapshotAfter = parseGeneratedExport(source, 'snapshotAfter')
+    if (!isRecord(migration) || !isRecord(snapshotAfter)) {
       throw new Error(
         `Migration file ${file} must export { migration, snapshotAfter }.`
       )
     }
-    loaded.push({
-      migration: mod.migration,
-      snapshotAfter: mod.snapshotAfter
-    })
+    return {
+      migration: migration as unknown as Migration,
+      snapshotAfter: snapshotAfter as unknown as SchemaSnapshot
+    }
+  }
+
+  const mod = (await import(pathToFileURL(file).href)) as Record<string, unknown>
+  if (!isMigrationFile(mod)) {
+    throw new Error(
+      `Migration file ${file} must export { migration, snapshotAfter }.`
+    )
+  }
+  return {
+    migration: mod.migration,
+    snapshotAfter: mod.snapshotAfter
+  }
+}
+
+export async function loadMigrations(dir: string): Promise<MigrationFile[]> {
+  const files = await migrationFiles(resolve(dir))
+  const loaded: MigrationFile[] = []
+  for (const file of files) {
+    loaded.push(await loadMigrationFile(file))
   }
   return loaded
 }
@@ -284,6 +390,14 @@ export async function loadApp(path: string): Promise<TangoApp> {
   return app as unknown as TangoApp
 }
 
+function moduleUrl(path: string, options: LoadHandlerOptions = {}): string {
+  const url = pathToFileURL(resolve(path))
+  if (options.cacheBust !== undefined) {
+    url.searchParams.set('t', options.cacheBust)
+  }
+  return url.href
+}
+
 function isWebHandler(value: unknown): value is WebHandler {
   return typeof value === 'function'
 }
@@ -295,8 +409,11 @@ function isRoutableHandler(value: unknown): value is { handle: WebHandler } {
   )
 }
 
-export async function loadHandler(path: string): Promise<WebHandler> {
-  const mod = (await import(pathToFileURL(resolve(path)).href)) as Record<
+export async function loadHandler(
+  path: string,
+  options: LoadHandlerOptions = {}
+): Promise<WebHandler> {
+  const mod = (await import(moduleUrl(path, options))) as Record<
     string,
     unknown
   >
@@ -310,4 +427,123 @@ export async function loadHandler(path: string): Promise<WebHandler> {
   throw new Error(
     `Handler module ${basename(path)} must export a Web handler function or an object with handle(request).`
   )
+}
+
+export async function serveProject(
+  options: ServeProjectOptions = {}
+): Promise<DevServer> {
+  const handlerPath = options.handlerPath ?? DEFAULT_SERVE_HANDLER_PATH
+  const host = options.host ?? '127.0.0.1'
+  const port = options.port ?? 8000
+  return serve(await loadHandler(handlerPath), { host, port })
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err)
+}
+
+function runShellCommand(command: string): Promise<void> {
+  return new Promise((resolveCommand, rejectCommand) => {
+    const child = spawn(command, {
+      shell: true,
+      stdio: 'inherit'
+    })
+    child.once('error', rejectCommand)
+    child.once('close', (code, signal) => {
+      if (code === 0) {
+        resolveCommand()
+        return
+      }
+      rejectCommand(
+        new Error(
+          signal === null
+            ? `Build command failed with exit code ${code ?? 'unknown'}.`
+            : `Build command failed with signal ${signal}.`
+        )
+      )
+    })
+  })
+}
+
+async function buildAndLoadHandler(
+  handlerPath: string,
+  buildCommand: string
+): Promise<WebHandler> {
+  console.log(`Building with "${buildCommand}"...`)
+  await runShellCommand(buildCommand)
+  return loadHandler(handlerPath, { cacheBust: String(Date.now()) })
+}
+
+export async function runDevServer(options: DevServerOptions): Promise<void> {
+  const host = options.host ?? '127.0.0.1'
+  const port = options.port ?? 8000
+  const buildCommand = options.buildCommand ?? DEFAULT_BUILD_COMMAND
+  const watchDirs =
+    options.watchDirs === undefined || options.watchDirs.length === 0
+      ? DEFAULT_WATCH_DIRS
+      : options.watchDirs
+  const debounceMs = options.debounceMs ?? 200
+
+  let activeHandler = await buildAndLoadHandler(options.handlerPath, buildCommand)
+  const devServer = await serve((request) => activeHandler(request), { host, port })
+  console.log(`Tango dev server listening at ${devServer.url}`)
+  console.log(`Watching: ${watchDirs.join(', ')}`)
+
+  let debounceTimer: NodeJS.Timeout | undefined
+  let reloading = false
+  let reloadRequested = false
+
+  const reload = async (): Promise<void> => {
+    if (reloading) {
+      reloadRequested = true
+      return
+    }
+
+    reloading = true
+    try {
+      do {
+        reloadRequested = false
+        try {
+          activeHandler = await buildAndLoadHandler(options.handlerPath, buildCommand)
+          console.log('Reloaded Tango dev server.')
+        } catch (err) {
+          console.error(`Dev rebuild failed: ${errorMessage(err)}`)
+        }
+      } while (reloadRequested)
+    } finally {
+      reloading = false
+    }
+  }
+
+  const scheduleReload = (): void => {
+    if (debounceTimer !== undefined) {
+      clearTimeout(debounceTimer)
+    }
+    debounceTimer = setTimeout(() => {
+      debounceTimer = undefined
+      void reload()
+    }, debounceMs)
+  }
+
+  const watchers: FSWatcher[] = watchDirs.map((dir) =>
+    watchFiles(resolve(dir), { recursive: true }, scheduleReload)
+  )
+
+  await new Promise<void>((resolveServer) => {
+    const shutdown = (): void => {
+      if (debounceTimer !== undefined) {
+        clearTimeout(debounceTimer)
+      }
+      for (const watcher of watchers) {
+        watcher.close()
+      }
+      void devServer.close().then(resolveServer, (err: unknown) => {
+        console.error(`Failed to close dev server: ${errorMessage(err)}`)
+        resolveServer()
+      })
+    }
+
+    process.once('SIGINT', shutdown)
+    process.once('SIGTERM', shutdown)
+  })
 }

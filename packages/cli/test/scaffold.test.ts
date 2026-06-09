@@ -6,6 +6,11 @@ import { describe, expect, it } from 'vitest'
 
 import { startApp, startProject } from '../src/index.js'
 
+interface ProjectPackageJson {
+  readonly name: string
+  readonly scripts: Record<string, string>
+}
+
 async function tempDir(): Promise<string> {
   return mkdtemp(join(tmpdir(), 'tango-scaffold-'))
 }
@@ -28,13 +33,23 @@ describe('scaffold commands', () => {
         "mysqlFromEnv({ projectName: 'shop' })"
       )
       const packageJson = await readFile(join(projectDir, 'package.json'), 'utf8')
-      expect(packageJson).toContain('"name": "shop"')
-      expect(packageJson).toContain('"serve": "yarn build && tango serve')
-      expect(packageJson).toContain(
-        '--migrations-dir ./src/apps/core/migrations'
+      const parsedPackageJson = JSON.parse(packageJson) as ProjectPackageJson
+      expect(parsedPackageJson.name).toBe('shop')
+      expect(parsedPackageJson.scripts['clean']).toBe('rm -rf dist')
+      expect(parsedPackageJson.scripts['serve']).toBe(
+        'yarn clean && yarn build && tango serve'
       )
-      expect(packageJson).toContain(
-        '--migrations-dir ./dist/apps/core/migrations'
+      expect(parsedPackageJson.scripts['dev']).toBe(
+        'tango dev --handler ./dist/project.js --watch ./src --build "yarn clean && yarn build"'
+      )
+      expect(parsedPackageJson.scripts['makemigrations']).toBe(
+        'yarn clean && yarn build && tango makemigrations --app ./dist/apps/core/app.js --migrations-dir ./src/apps/core/migrations --name auto'
+      )
+      expect(parsedPackageJson.scripts['migrate']).toBe(
+        'yarn clean && yarn build && tango migrate --app ./dist/apps/core/app.js --migrations-dir ./dist/apps/core/migrations'
+      )
+      expect(parsedPackageJson.scripts['check']).toBe(
+        'yarn clean && yarn build && tango check --app ./dist/apps/core/app.js --migrations-dir ./src/apps/core/migrations'
       )
       await expect(readFile(join(projectDir, 'tsconfig.json'), 'utf8')).resolves.toContain(
         '"outDir": "dist"'

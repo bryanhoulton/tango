@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
@@ -50,6 +50,76 @@ describe('makemigrations', () => {
       expect(files[0]?.snapshotAfter.tables['users']?.columns['email']?.unique).toBe(
         true
       )
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('reads generated TS source migration history', async () => {
+    const dir = await tempMigrationsDir()
+    try {
+      const UserEmail = model('users', {
+        id: f.int().primaryKey().autoIncrement(),
+        email: f.varchar(255)
+      })
+      const appV1 = defineApp({
+        name: 'blog',
+        models: [UserEmail],
+        migrationsDir: dir
+      })
+      await makemigrations({ app: appV1, name: 'init' })
+
+      const UserEmailAndName = model('users', {
+        id: f.int().primaryKey().autoIncrement(),
+        email: f.varchar(255),
+        name: f.varchar(255)
+      })
+      const appV2 = defineApp({
+        name: 'blog',
+        models: [UserEmailAndName],
+        migrationsDir: dir
+      })
+
+      const result = await makemigrations({
+        app: appV2,
+        name: 'add_name'
+      })
+
+      expect(result.written).toBe(true)
+      expect(result.path).toBe(join(dir, '0002_add_name.ts'))
+      const [operation] = result.migration.operations
+      if (operation?.kind !== 'addColumn') {
+        throw new Error('Expected makemigrations to create one addColumn operation.')
+      }
+      expect(operation.table).toBe('users')
+      expect(operation.column.name).toBe('name')
+      const files = await loadMigrations(dir)
+      expect(files).toHaveLength(2)
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('ignores generated declaration files when loading built migrations', async () => {
+    const dir = await tempMigrationsDir()
+    try {
+      await writeFile(
+        join(dir, '0001_init.js'),
+        `export const migration = { "name": "0001_init", "operations": [] }
+export const snapshotAfter = { "tables": {} }
+`,
+        'utf8'
+      )
+      await writeFile(
+        join(dir, '0001_init.d.ts'),
+        'export declare const migration: unknown\n',
+        'utf8'
+      )
+
+      const files = await loadMigrations(dir)
+
+      expect(files).toHaveLength(1)
+      expect(files[0]?.migration.name).toBe('0001_init')
     } finally {
       await rm(dir, { recursive: true, force: true })
     }

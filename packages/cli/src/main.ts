@@ -1,13 +1,13 @@
 #!/usr/bin/env node
-import { serve } from '@tango-ts/adapters'
 import { createMysqlConnection } from '@tango-ts/orm'
 
 import {
   checkMigrations,
   loadApp,
-  loadHandler,
   makemigrations,
   migrateApp,
+  runDevServer,
+  serveProject,
   startApp,
   startProject
 } from './index.js'
@@ -17,18 +17,39 @@ function valueAfter(args: readonly string[], flag: string): string | undefined {
   return idx === -1 ? undefined : args[idx + 1]
 }
 
+function valuesAfter(args: readonly string[], flag: string): string[] {
+  const values: string[] = []
+  for (let idx = 0; idx < args.length; idx += 1) {
+    const value = args[idx + 1]
+    if (args[idx] === flag && value !== undefined) {
+      values.push(value)
+    }
+  }
+  return values
+}
+
 async function main(): Promise<void> {
   const [, , command, ...args] = process.argv
 
   if (command === 'serve') {
+    const handlerPath = valueAfter(args, '--handler')
+    const port = Number(valueAfter(args, '--port') ?? 8000)
+    const host = valueAfter(args, '--host') ?? '127.0.0.1'
+    const devServer = await serveProject({ handlerPath, host, port })
+    console.log(`Tango dev server listening at ${devServer.url}`)
+    return
+  }
+
+  if (command === 'dev') {
     const handlerPath = valueAfter(args, '--handler')
     if (handlerPath === undefined) {
       throw new Error('Missing --handler <path-to-web-handler-module>.')
     }
     const port = Number(valueAfter(args, '--port') ?? 8000)
     const host = valueAfter(args, '--host') ?? '127.0.0.1'
-    const devServer = await serve(await loadHandler(handlerPath), { host, port })
-    console.log(`Tango dev server listening at ${devServer.url}`)
+    const buildCommand = valueAfter(args, '--build')
+    const watchDirs = valuesAfter(args, '--watch')
+    await runDevServer({ handlerPath, host, port, buildCommand, watchDirs })
     return
   }
 
@@ -63,7 +84,11 @@ async function main(): Promise<void> {
 
   if (command === 'makemigrations') {
     const name = valueAfter(args, '--name') ?? 'auto'
-    const result = await makemigrations({ app, migrationsDir, name })
+    const result = await makemigrations({
+      app,
+      migrationsDir,
+      name
+    })
     if (result.written) {
       console.log(`Created ${result.path}`)
     } else {
@@ -100,7 +125,7 @@ async function main(): Promise<void> {
   }
 
   throw new Error(
-    `Unknown command "${command ?? ''}". Use startproject, startapp, makemigrations, migrate, check, or serve.`
+    `Unknown command "${command ?? ''}". Use startproject, startapp, makemigrations, migrate, check, serve, or dev.`
   )
 }
 
