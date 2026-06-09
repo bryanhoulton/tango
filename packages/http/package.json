@@ -1,6 +1,6 @@
 {
   "name": "@tango-ts/http",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Runtime-agnostic Web Request/Response primitives for Tango.",
   "license": "MIT",
   "type": "module",

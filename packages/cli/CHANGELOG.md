@@ -1,5 +1,17 @@
 # @tango-ts/cli
 
+## 0.2.2
+
+### Patch Changes
+
+- Generated `vercel.json` now writes a placeholder file into the static output
+  directory (`mkdir -p public && touch public/.keep`). Vercel rejects an empty
+  output directory ("Output Directory is empty"), and a dotfile placeholder is
+  the one kind of static file that can never shadow the catch-all API rewrite.
+  - @tango-ts/adapters@0.2.2
+  - @tango-ts/migrations@0.2.2
+  - @tango-ts/orm@0.2.2
+
 ## 0.2.1
 
 ### Patch Changes

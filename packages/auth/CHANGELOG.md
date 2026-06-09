@@ -1,5 +1,11 @@
 # @tango-ts/auth
 
+## 0.2.2
+
+### Patch Changes
+
+- @tango-ts/http@0.2.2
+
 ## 0.2.1
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
   "name": "@tango-ts/views",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "DRF-style API views and ModelViewSet for Tango.",
   "license": "MIT",
   "type": "module",

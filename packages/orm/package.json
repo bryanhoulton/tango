@@ -1,6 +1,6 @@
 {
   "name": "@tango-ts/orm",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Tango ORM: declarative models, managers, lazy querysets, Django-style lookups, compiled to Kysely (MySQL).",
   "license": "MIT",
   "type": "module",

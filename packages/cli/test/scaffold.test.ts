@@ -99,7 +99,9 @@ describe('scaffold commands', () => {
       ])
       // Functions-only project: without these, Vercel runs the package.json
       // build script and then fails looking for a `public` output directory.
-      expect(vercelConfig.buildCommand).toBe('mkdir -p public')
+      // The directory must also be non-empty ("Output Directory is empty"),
+      // and only a dotfile placeholder never shadows the catch-all rewrite.
+      expect(vercelConfig.buildCommand).toBe('mkdir -p public && touch public/.keep')
       expect(vercelConfig.outputDirectory).toBe('public')
       await expect(readFile(join(projectDir, 'README.md'), 'utf8')).resolves.toContain(
         '# shop'
