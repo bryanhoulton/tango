@@ -38,6 +38,51 @@ startup instead of silently using development defaults.
 
 ## Deployment
 
+Two paths ship out of the box: serverless on Vercel, or a long-running Node
+container. Both run the same `src/project.ts` unchanged.
+
+### Vercel
+
+`api/index.ts` and `vercel.json` are already wired — every path is rewritten
+into one function and Tango routes internally (Node.js runtime; the Edge
+runtime is not supported because MySQL needs TCP).
+
+```sh
+vercel env add TANGO_DATABASE_URL   # mysql://user:pass@host:3306/db?ssl=true
+vercel deploy
+```
+
+Notes for serverless MySQL:
+
+- The connection pool defaults to 1 connection per warm instance on Vercel
+  (`VERCEL=1` is detected); tune with `TANGO_DB_POOL_SIZE`.
+- Use a database that tolerates many connections (PlanetScale, or RDS behind
+  RDS Proxy) — each warm function instance holds its own pool.
+- Run migrations from CI, **not** from Vercel's build: preview deployments
+  share production env vars, and a PR branch must never alter the production
+  schema. Example GitHub Action:
+
+```yaml
+name: migrate
+on:
+  push:
+    branches: [main]
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: yarn install && yarn run check
+      - run: yarn run migrate
+        env:
+          NODE_ENV: production
+          TANGO_DATABASE_URL: ${{ secrets.TANGO_DATABASE_URL }}
+```
+
+### Container
+
 The app is a long-running Node process. The shipped `Dockerfile` builds a
 production image:
 

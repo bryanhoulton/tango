@@ -83,6 +83,16 @@ describe('scaffold commands', () => {
       const dockerfile = await readFile(join(projectDir, 'Dockerfile'), 'utf8')
       expect(dockerfile).toContain('EXPOSE 8000')
       expect(dockerfile).toContain('tango')
+      // Vercel deployment is wired out of the box.
+      const vercelEntry = await readFile(join(projectDir, 'api/index.ts'), 'utf8')
+      expect(vercelEntry).toContain("vercelHandler(project)")
+      expect(vercelEntry).toContain("@tango-ts/adapters/vercel")
+      const vercelConfig = JSON.parse(
+        await readFile(join(projectDir, 'vercel.json'), 'utf8')
+      ) as { rewrites: { source: string; destination: string }[] }
+      expect(vercelConfig.rewrites).toEqual([
+        { source: '/(.*)', destination: '/api' }
+      ])
       await expect(readFile(join(projectDir, 'README.md'), 'utf8')).resolves.toContain(
         '# shop'
       )

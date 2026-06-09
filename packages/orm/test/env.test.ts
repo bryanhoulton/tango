@@ -67,6 +67,16 @@ describe('mysqlConfigFromEnv', () => {
     expect(config.host).toBe('db.example.com')
   })
 
+  it('defaults to one pooled connection per instance on Vercel', () => {
+    expect(mysqlConfigFromEnv({}, { VERCEL: '1' }).connectionLimit).toBe(1)
+    // Explicit tuning always wins over the platform default.
+    expect(
+      mysqlConfigFromEnv({}, { VERCEL: '1', TANGO_DB_POOL_SIZE: '4' })
+        .connectionLimit
+    ).toBe(4)
+    expect(mysqlConfigFromEnv({}, {}).connectionLimit).toBeUndefined()
+  })
+
   it('supports TANGO_DB_SSL and TANGO_DB_POOL_SIZE', () => {
     const config = mysqlConfigFromEnv(
       {},

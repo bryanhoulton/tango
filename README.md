@@ -10,13 +10,14 @@ Tango exists for developers who want the Django + DRF way of building APIs:
 declare a model, derive validation and serialization from that model, register a
 viewset, and get typed CRUD endpoints without rewriting the same shape in five
 places. The core is TypeScript-first, MySQL/PlanetScale-oriented, and built around
-Web-standard `Request` / `Response` handlers so the same app can run locally today
-and behind serverless adapters later.
+Web-standard `Request` / `Response` handlers, so the same app runs locally, in a
+container, or serverless on Vercel without changes.
 
 Tango is still early. The ORM, migrations, serializers, router, viewsets, auth
-primitives, OpenAPI generation, Node/local adapter, and CLI scaffolding exist.
-Admin, caching, and more deployment adapters are part of the direction, not the
-current quickstart surface.
+primitives, OpenAPI generation, middleware, Node and Vercel adapters, and CLI
+scaffolding exist. Admin, caching, and more deployment adapters (Lambda,
+Cloudflare Workers) are part of the direction, not the current quickstart
+surface.
 
 ## Start A Project
 
@@ -202,9 +203,46 @@ steps.
 
 ## Deployment
 
-Generated projects ship a `Dockerfile`, `.env.example`, and a `start` script, so
-the supported deployment today is a long-running Node container (Railway,
-Render, Fly.io, ECS, ...). The release pipeline:
+Generated projects deploy two ways out of the box, running the same
+`src/project.ts` unchanged:
+
+### Vercel (serverless)
+
+Projects ship `api/index.ts` and `vercel.json` pre-wired — every path is
+rewritten into a single Vercel Function and Tango routes internally:
+
+```ts
+// api/index.ts (generated for you)
+import { vercelHandler } from '@tango-ts/adapters/vercel'
+import { project } from '../src/project.js'
+
+export default vercelHandler(project)
+```
+
+Deploying is two commands from the project directory:
+
+```sh
+vercel env add TANGO_DATABASE_URL   # mysql://user:pass@host:3306/db?ssl=true
+vercel deploy
+```
+
+Things to know:
+
+- **Node.js runtime only.** The Edge runtime is unsupported until an HTTP
+  database driver lands (mysql2 needs TCP sockets).
+- **Pooling:** on Vercel the connection pool defaults to 1 connection per warm
+  instance (tune with `TANGO_DB_POOL_SIZE`). Each warm instance holds its own
+  pool, so prefer a database that tolerates many connections (PlanetScale, or
+  RDS behind RDS Proxy).
+- **Migrations run in CI, never in Vercel's build** — preview deployments share
+  production env vars, and a PR branch must never alter the production schema.
+  Run `tango check` on PRs and `tango migrate` on merge to main; the generated
+  project README includes a copy-paste GitHub Action.
+
+### Container (long-running Node)
+
+Projects also ship a `Dockerfile`, `.env.example`, and a `start` script for
+Railway, Render, Fly.io, ECS, etc. The release pipeline:
 
 1. Build the project with `yarn build`.
 2. Run `tango check` in CI to fail when model changes are missing migrations.

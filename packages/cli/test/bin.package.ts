@@ -41,6 +41,8 @@ describe('published CLI package', () => {
       expect(files).toContain('package/templates/default-project/__DOT__dockerignore')
       expect(files).toContain('package/templates/default-project/__DOT__env.example')
       expect(files).toContain('package/templates/default-project/README.md')
+      expect(files).toContain('package/templates/default-project/api/index.ts')
+      expect(files).toContain('package/templates/default-project/vercel.json')
     } finally {
       await rm(dir, { recursive: true, force: true })
     }

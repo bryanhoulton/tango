@@ -35,8 +35,9 @@ rendering, ORM behavior, or adapter internals.
   reloads the built handler after successful rebuilds.
 - `startProject(...)` — copies the default project template to a target directory,
   including deployment assets (`Dockerfile`, `.dockerignore`, `.env.example`,
-  `.gitignore`, `README.md`). Dotfiles are stored as `__DOT__name` in the template
-  because npm mangles real dotfiles when packing.
+  `.gitignore`, `README.md`, and the Vercel entrypoint `api/index.ts` +
+  `vercel.json`). Dotfiles are stored as `__DOT__name` in the template because
+  npm mangles real dotfiles when packing.
 - `startApp(...)` — copies the default app template to a target directory.
 - `mysqlConnectionOptionsFromEnv(...)` — delegates to the ORM's
   `mysqlConfigFromEnv`, sharing URL/TLS/fail-loud-in-production resolution with

@@ -1,6 +1,6 @@
 {
   "name": "@tango-ts/adapters",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Runtime adapters for Tango Web Request handlers.",
   "license": "MIT",
   "type": "module",
@@ -10,6 +10,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./vercel": {
+      "types": "./dist/vercel.d.ts",
+      "import": "./dist/vercel.js"
     }
   },
   "scripts": {

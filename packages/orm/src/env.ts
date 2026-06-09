@@ -162,7 +162,12 @@ export function mysqlConfigFromEnv(
     options.connectionLimit ??
     (env.TANGO_DB_POOL_SIZE === undefined
       ? undefined
-      : parsePositiveInteger(env.TANGO_DB_POOL_SIZE, 'TANGO_DB_POOL_SIZE'))
+      : parsePositiveInteger(env.TANGO_DB_POOL_SIZE, 'TANGO_DB_POOL_SIZE')) ??
+    // On serverless platforms every warm instance holds its own pool, so the
+    // mysql2 default of 10 connections per instance exhausts the database
+    // under burst traffic. Vercel sets VERCEL=1; default to one connection
+    // per instance there unless explicitly tuned.
+    (env.VERCEL === undefined ? undefined : 1)
 
   if (env.NODE_ENV === 'production') {
     const missing: string[] = []
