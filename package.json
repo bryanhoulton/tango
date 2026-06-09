@@ -106,7 +106,6 @@
     "flat-cache": "^4.0.1",
     "flatted": "^3.4.2",
     "fs-extra": "^7.0.1",
-    "fsevents": "^2.3.3",
     "generate-function": "^2.3.1",
     "get-east-asian-width": "^1.6.0",
     "glob-parent": "^6.0.2",
