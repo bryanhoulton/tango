@@ -89,10 +89,18 @@ describe('scaffold commands', () => {
       expect(vercelEntry).toContain("@tango-ts/adapters/vercel")
       const vercelConfig = JSON.parse(
         await readFile(join(projectDir, 'vercel.json'), 'utf8')
-      ) as { rewrites: { source: string; destination: string }[] }
+      ) as {
+        buildCommand: string
+        outputDirectory: string
+        rewrites: { source: string; destination: string }[]
+      }
       expect(vercelConfig.rewrites).toEqual([
         { source: '/(.*)', destination: '/api' }
       ])
+      // Functions-only project: without these, Vercel runs the package.json
+      // build script and then fails looking for a `public` output directory.
+      expect(vercelConfig.buildCommand).toBe('mkdir -p public')
+      expect(vercelConfig.outputDirectory).toBe('public')
       await expect(readFile(join(projectDir, 'README.md'), 'utf8')).resolves.toContain(
         '# shop'
       )

@@ -1,5 +1,14 @@
 # @tango-ts/server
 
+## 0.2.1
+
+### Patch Changes
+
+- @tango-ts/adapters@0.2.1
+- @tango-ts/http@0.2.1
+- @tango-ts/orm@0.2.1
+- @tango-ts/router@0.2.1
+
 ## 0.2.0
 
 ### Minor Changes

@@ -45,7 +45,10 @@ container. Both run the same `src/project.ts` unchanged.
 
 `api/index.ts` and `vercel.json` are already wired — every path is rewritten
 into one function and Tango routes internally (Node.js runtime; the Edge
-runtime is not supported because MySQL needs TCP).
+runtime is not supported because MySQL needs TCP). The `buildCommand` in
+`vercel.json` is `mkdir -p public` on purpose: this is a functions-only
+project, so Vercel needs an (empty) static output directory, and the function
+itself is compiled by Vercel directly from `api/index.ts`.
 
 ```sh
 vercel env add TANGO_DATABASE_URL   # mysql://user:pass@host:3306/db?ssl=true

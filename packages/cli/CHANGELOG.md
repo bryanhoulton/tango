@@ -1,5 +1,17 @@
 # @tango-ts/cli
 
+## 0.2.1
+
+### Patch Changes
+
+- Fix Vercel deploys of generated projects: `vercel.json` now sets
+  `buildCommand: "mkdir -p public"` and `outputDirectory: "public"`. Without
+  them, Vercel ran the package.json build script and then failed looking for a
+  `public` static output directory in this functions-only project.
+  - @tango-ts/adapters@0.2.1
+  - @tango-ts/migrations@0.2.1
+  - @tango-ts/orm@0.2.1
+
 ## 0.2.0
 
 ### Minor Changes
