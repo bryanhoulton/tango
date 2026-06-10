@@ -16,6 +16,7 @@ import {
   SIGNATURE_HEADER,
   signFunctionRequest,
   TIMESTAMP_HEADER,
+  VERCEL_PROTECTION_BYPASS_HEADER,
   verifyFunctionRequest,
   withFunctionRuntime,
   type FetchLike,
@@ -320,6 +321,72 @@ describe('http runtime + dispatch handler', () => {
     })
     await expect(runtime.drain()).resolves.toBeUndefined()
   })
+
+  it('configured headers are sent on every dispatch, signature headers winning', async () => {
+    const fn = defineFunction({
+      name: 'work',
+      handler: (p: { value: number }) => Promise.resolve(p)
+    })
+    const registry = createFunctionRegistry([
+      { appName: 'core', functions: [fn] }
+    ])
+    const seen: Record<string, string>[] = []
+    const fetchImpl: FetchLike = (url, init) => {
+      void url
+      seen.push(init.headers)
+      return Promise.resolve(
+        new Response(JSON.stringify({ result: null }), { status: 200 })
+      )
+    }
+    const runtime = createHttpRuntime({
+      registry,
+      baseUrl: 'https://example.test',
+      secret: 'shared-secret',
+      headers: {
+        [VERCEL_PROTECTION_BYPASS_HEADER]: 'bypass-secret',
+        [SIGNATURE_HEADER]: 'must-not-override'
+      },
+      logger: silentLogger,
+      fetchImpl
+    })
+    await withFunctionRuntime(runtime, () => fn.invoke({ value: 1 }))
+    expect(seen).toHaveLength(1)
+    expect(seen[0]?.[VERCEL_PROTECTION_BYPASS_HEADER]).toBe('bypass-secret')
+    expect(seen[0]?.[SIGNATURE_HEADER]).not.toBe('must-not-override')
+  })
+
+  it('a 401 from in front of the deployment surfaces the protection hint', async () => {
+    const fn = defineFunction({
+      name: 'work',
+      handler: (p: { value: number }) => Promise.resolve(p)
+    })
+    const registry = createFunctionRegistry([
+      { appName: 'core', functions: [fn] }
+    ])
+    // Vercel Deployment Protection rejects before the request reaches the
+    // deployment: an HTML body and a bare 401, never our JSON envelope.
+    const fetchImpl: FetchLike = () =>
+      Promise.resolve(
+        new Response('<html>Authentication Required</html>', {
+          status: 401,
+          statusText: 'Unauthorized'
+        })
+      )
+    const runtime = createHttpRuntime({
+      registry,
+      baseUrl: 'https://shop.vercel.app',
+      secret: 'shared-secret',
+      logger: silentLogger,
+      fetchImpl
+    })
+    const invocation = withFunctionRuntime(runtime, () =>
+      fn.invoke({ value: 1 })
+    )
+    await expect(invocation).rejects.toThrow(FunctionInvocationError)
+    await expect(
+      withFunctionRuntime(runtime, () => fn.invoke({ value: 1 }))
+    ).rejects.toThrow(/Deployment Protection.*VERCEL_AUTOMATION_BYPASS_SECRET/s)
+  })
 })
 
 describe('dispatch handler rejections', () => {
@@ -451,6 +518,55 @@ describe('functionRuntimeFromEnv', () => {
     expect(() => resolve({ TANGO_FUNCTIONS_TRANSPORT: 'queue' })).toThrow(
       'Invalid TANGO_FUNCTIONS_TRANSPORT "queue"'
     )
+  })
+
+  it('sends the Vercel protection bypass header when the platform provides the secret', async () => {
+    const seen: Record<string, string>[] = []
+    const fetchImpl: FetchLike = (url, init) => {
+      void url
+      seen.push(init.headers)
+      return Promise.resolve(
+        new Response(JSON.stringify({ result: null }), { status: 200 })
+      )
+    }
+    const resolved = functionRuntimeFromEnv({
+      registry,
+      database: COMPILE_ONLY,
+      logger: silentLogger,
+      env: {
+        VERCEL: '1',
+        VERCEL_URL: 'shop.vercel.app',
+        TANGO_FUNCTIONS_SECRET: 's3cret',
+        VERCEL_AUTOMATION_BYPASS_SECRET: 'bypass-secret'
+      },
+      fetchImpl
+    })
+    await withFunctionRuntime(resolved.runtime, () => fn.invoke(null))
+    expect(seen[0]?.[VERCEL_PROTECTION_BYPASS_HEADER]).toBe('bypass-secret')
+  })
+
+  it('omits the bypass header when the platform secret is absent', async () => {
+    const seen: Record<string, string>[] = []
+    const fetchImpl: FetchLike = (url, init) => {
+      void url
+      seen.push(init.headers)
+      return Promise.resolve(
+        new Response(JSON.stringify({ result: null }), { status: 200 })
+      )
+    }
+    const resolved = functionRuntimeFromEnv({
+      registry,
+      database: COMPILE_ONLY,
+      logger: silentLogger,
+      env: {
+        VERCEL: '1',
+        VERCEL_URL: 'shop.vercel.app',
+        TANGO_FUNCTIONS_SECRET: 's3cret'
+      },
+      fetchImpl
+    })
+    await withFunctionRuntime(resolved.runtime, () => fn.invoke(null))
+    expect(seen[0]).not.toHaveProperty(VERCEL_PROTECTION_BYPASS_HEADER)
   })
 
   it('explicit overrides beat the environment', () => {

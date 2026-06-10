@@ -127,6 +127,12 @@ export interface ModelViewSetRouteMetadata<F extends Fields> {
 interface ModelViewSetActionCommon {
   readonly name: string
   readonly method: Route['method']
+  /**
+   * The action's URL segment — just the action name (e.g. `'close'`), not a
+   * path pattern. The viewset builds the full route itself: detail actions
+   * mount at `/:id/<path>/` (the `/:id/` prefix is prepended automatically)
+   * and collection actions at `/<path>/`.
+   */
   readonly path: string
   /**
    * Per-action authentication classes (DRF's `@action(authentication_classes)`).

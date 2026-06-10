@@ -1,6 +1,6 @@
 {
   "name": "@tango-ts/cli",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Tango management commands: makemigrations, migrate, and migration checks.",
   "license": "MIT",
   "type": "module",

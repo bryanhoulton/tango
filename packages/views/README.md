@@ -22,6 +22,8 @@ HTTP primitives, permissions, authentication, or pagination yet.
 - `DELETE /resource/:id/` destroy.
 - Custom collection/detail actions via `actions: [...]` (DRF's `@action`), e.g.
   `GET /users/export/` or `POST /users/:id/activate/`:
+  - An action's `path` is just the action name (e.g. `'activate'`), never a
+    path pattern — the viewset prepends `/:id/` for detail actions itself.
   - Detail handlers receive `(ctx, row)` — the row is resolved DRF-style through
     the scoped queryset (out-of-scope or missing rows 404) and past the
     object-permission pass before the handler runs.

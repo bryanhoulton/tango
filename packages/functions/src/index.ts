@@ -14,6 +14,7 @@ export {
   FunctionInvocationError,
   FunctionRegistry,
   getFunctionRuntime,
+  VERCEL_PROTECTION_BYPASS_HEADER,
   withFunctionRuntime
 } from './runtime.js'
 export type {

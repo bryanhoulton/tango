@@ -6,6 +6,8 @@ import type { LooseDatabase } from '@tango-ts/orm'
 import {
   createHttpRuntime,
   createInlineRuntime,
+  VERCEL_PROTECTION_BYPASS_HEADER,
+  type FetchLike,
   type FunctionRegistry,
   type FunctionRuntime
 } from './runtime.js'
@@ -36,6 +38,8 @@ export interface FunctionRuntimeEnvOptions {
   readonly overrides?: FunctionsOverrides
   /** Env override for tests. Defaults to process.env. */
   readonly env?: Record<string, string | undefined>
+  /** Fetch override for tests. Defaults to the global fetch. */
+  readonly fetchImpl?: FetchLike
 }
 
 export interface ResolvedFunctionRuntime {
@@ -100,6 +104,15 @@ export function functionRuntimeFromEnv(
       'Cannot resolve the function dispatch URL for the http transport. Set TANGO_FUNCTIONS_URL (on Vercel, VERCEL_URL is provided automatically).'
     )
   }
+  // Vercel Deployment Protection sits in front of generated `*.vercel.app`
+  // URLs and 401s anything without this bypass header — including our own
+  // self-invocations. Vercel injects the secret automatically once
+  // "Protection Bypass for Automation" is enabled on the project.
+  const bypassSecret = env.VERCEL_AUTOMATION_BYPASS_SECRET
+  const headers =
+    bypassSecret !== undefined && bypassSecret.length > 0
+      ? { [VERCEL_PROTECTION_BYPASS_HEADER]: bypassSecret }
+      : undefined
   return {
     transport,
     secret,
@@ -107,7 +120,9 @@ export function functionRuntimeFromEnv(
       registry: options.registry,
       baseUrl: url,
       secret,
-      logger: options.logger
+      headers,
+      logger: options.logger,
+      fetchImpl: options.fetchImpl
     })
   }
 }

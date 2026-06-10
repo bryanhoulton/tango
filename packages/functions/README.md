@@ -39,7 +39,12 @@ request pipeline — `@tango-ts/server` wires those.
 - `functionRuntimeFromEnv` — transport resolution: `TANGO_FUNCTIONS_TRANSPORT`
   (defaults to `http` on Vercel, `inline` elsewhere), `TANGO_FUNCTIONS_SECRET`
   (required for http; fails at startup), `TANGO_FUNCTIONS_URL` (defaults to
-  `https://$VERCEL_URL`).
+  `https://$VERCEL_URL`). When `VERCEL_AUTOMATION_BYPASS_SECRET` is present,
+  every dispatch carries `x-vercel-protection-bypass` — required whenever
+  Vercel Deployment Protection covers the deployment URL, since the protection
+  layer 401s the self-invocation at the edge before it reaches the app. Enable
+  "Protection Bypass for Automation" in the Vercel project settings to get the
+  secret injected.
 - `defer` keeps work alive via Vercel's `waitUntil` when present (read from the
   runtime global, no platform dependency); runtimes expose `drain()` and the
   project's `dispose()` awaits it during graceful shutdown.

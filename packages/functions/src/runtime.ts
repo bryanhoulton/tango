@@ -241,11 +241,24 @@ export type FetchLike = (
   }
 ) => Promise<Response>
 
+/**
+ * Header that bypasses Vercel Deployment Protection. Sent on every dispatch
+ * when `VERCEL_AUTOMATION_BYPASS_SECRET` is available — without it, the
+ * self-invocation to `https://$VERCEL_URL` is rejected at Vercel's edge (401)
+ * before it ever reaches the deployment, on any protected URL.
+ */
+export const VERCEL_PROTECTION_BYPASS_HEADER = 'x-vercel-protection-bypass'
+
 export interface HttpRuntimeOptions {
   readonly registry: FunctionRegistry
   /** Base URL of this deployment, e.g. `https://$VERCEL_URL`. */
   readonly baseUrl: string
   readonly secret: string
+  /**
+   * Extra headers sent on every dispatch request, e.g. the Vercel deployment
+   * protection bypass header. Signature headers always win on conflict.
+   */
+  readonly headers?: Readonly<Record<string, string>>
   readonly logger?: Logger
   /** Fetch override for tests. Defaults to the global fetch. */
   readonly fetchImpl?: FetchLike
@@ -263,6 +276,27 @@ async function responseDetail(response: Response): Promise<string> {
     // Non-JSON error body; fall through to the status text.
   }
   return response.statusText === '' ? 'Unknown error.' : response.statusText
+}
+
+/**
+ * The dispatch endpoint never answers 401/403 (rejections are router-identical
+ * 404s, and project auth is bypassed for the reserved prefix), so either status
+ * means something in front of the deployment intercepted the self-invocation —
+ * on Vercel, almost always Deployment Protection on the `*.vercel.app` URL.
+ */
+function interceptionHint(status: number): string {
+  if (status !== 401 && status !== 403) {
+    return ''
+  }
+  return (
+    ' The dispatch endpoint never returns this status, so the request was' +
+    ' intercepted before reaching the deployment — most likely Vercel' +
+    ' Deployment Protection. Enable "Protection Bypass for Automation" in the' +
+    ' Vercel project settings (the transport sends' +
+    ` ${VERCEL_PROTECTION_BYPASS_HEADER} automatically when` +
+    ' VERCEL_AUTOMATION_BYPASS_SECRET is set), or point TANGO_FUNCTIONS_URL' +
+    ' at an unprotected URL.'
+  )
 }
 
 /**
@@ -297,6 +331,7 @@ export function createHttpRuntime(options: HttpRuntimeOptions): FunctionRuntime 
     const response = await fetchImpl(url, {
       method: 'POST',
       headers: {
+        ...options.headers,
         'content-type': 'application/json',
         [TIMESTAMP_HEADER]: timestamp,
         [SIGNATURE_HEADER]: signature
@@ -307,7 +342,7 @@ export function createHttpRuntime(options: HttpRuntimeOptions): FunctionRuntime 
       throw new FunctionInvocationError(
         `${address.appName}/${address.functionName}`,
         response.status,
-        await responseDetail(response)
+        `${await responseDetail(response)}${interceptionHint(response.status)}`
       )
     }
     const data = (await response.json()) as { readonly result?: JsonValue }

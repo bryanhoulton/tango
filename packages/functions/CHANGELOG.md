@@ -1,5 +1,11 @@
 # @tango-ts/functions
 
+## 0.8.1
+
+### Patch Changes
+
+- Fix http function transport failing behind Vercel Deployment Protection. The self-invocation to `https://$VERCEL_URL` was intercepted at Vercel's edge with a 401 before reaching the deployment (the dispatch endpoint itself never returns 401). The http transport now sends `x-vercel-protection-bypass` automatically when `VERCEL_AUTOMATION_BYPASS_SECRET` is set (enable "Protection Bypass for Automation" in the Vercel project settings), `createHttpRuntime` accepts an extra `headers` option, and 401/403 dispatch failures explain the interception and how to fix it. Also documents the viewset action `path` field as the bare action name (e.g. `'close'`) — the viewset prepends `/:id/` for detail actions itself.
+
 ## 0.8.0
 
 ### Minor Changes
