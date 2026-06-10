@@ -1,5 +1,5 @@
 import { Inbox, Plus, Search } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Badge,
   Button,
@@ -63,7 +63,18 @@ export function ListScreen({
 
   const searchField = model.searchFields[0]
 
-  const load = useCallback(async () => {
+  // Changing model resets list state and drops the previous model's rows so
+  // the table shows its loading state instead of flashing stale data. This
+  // effect is declared before the fetch effect so the reset wins the render.
+  useEffect(() => {
+    setPage(1)
+    setSearch('')
+    setFilters({})
+    setData(undefined)
+    setError(undefined)
+  }, [model.name])
+
+  useEffect(() => {
     const params = new URLSearchParams({ page: String(page) })
     if (search.length > 0 && searchField !== undefined) {
       params.set(`${searchField}__icontains`, search)
@@ -73,24 +84,28 @@ export function ListScreen({
         params.set(key, value)
       }
     }
-    try {
-      setData(await request<PaginatedList<Row>>(`${model.apiPath}?${params}`))
-      setError(undefined)
-    } catch {
-      setError('Failed to load rows.')
+    // Out-of-order guard: a slow response for a previous model/page must not
+    // overwrite the current one.
+    let cancelled = false
+    void (async () => {
+      try {
+        const result = await request<PaginatedList<Row>>(
+          `${model.apiPath}?${params}`
+        )
+        if (!cancelled) {
+          setData(result)
+          setError(undefined)
+        }
+      } catch {
+        if (!cancelled) {
+          setError('Failed to load rows.')
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
     }
   }, [model.apiPath, page, search, searchField, filters, refreshToken])
-
-  useEffect(() => {
-    void load()
-  }, [load])
-
-  // Changing model resets list state.
-  useEffect(() => {
-    setPage(1)
-    setSearch('')
-    setFilters({})
-  }, [model.name])
 
   const fieldByName = new Map(model.fields.map((field) => [field.name, field]))
   const columns = model.listDisplay.slice(0, 8).map((column) => ({
