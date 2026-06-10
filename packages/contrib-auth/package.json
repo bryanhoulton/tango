@@ -1,6 +1,6 @@
 {
   "name": "@tango-ts/contrib-auth",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Batteries-included auth app for Tango: User and AuthToken models, password hashing, token issuing routes, and a ready-made authentication class.",
   "license": "MIT",
   "type": "module",

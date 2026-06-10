@@ -1,6 +1,6 @@
 {
   "name": "@tango-ts/serializers",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Tango serializers: DRF-style validation and model serialization with inferred TypeScript types.",
   "license": "MIT",
   "type": "module",

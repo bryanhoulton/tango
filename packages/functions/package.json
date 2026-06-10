@@ -1,6 +1,6 @@
 {
   "name": "@tango-ts/functions",
-  "version": "0.1.0",
+  "version": "0.7.0",
   "description": "Internal serverless functions for Tango apps: defined per app, invoked from Tango logic, never part of the public API.",
   "license": "MIT",
   "type": "module",

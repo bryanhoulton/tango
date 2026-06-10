@@ -1,5 +1,20 @@
 # @tango-ts/admin
 
+## 0.7.0
+
+### Patch Changes
+
+- Updated dependencies [ed15d6b]
+  - @tango-ts/server@0.7.0
+  - @tango-ts/auth@0.7.0
+  - @tango-ts/contrib-auth@0.7.0
+  - @tango-ts/core-types@0.7.0
+  - @tango-ts/http@0.7.0
+  - @tango-ts/orm@0.7.0
+  - @tango-ts/router@0.7.0
+  - @tango-ts/serializers@0.7.0
+  - @tango-ts/views@0.7.0
+
 ## 0.6.0
 
 ### Minor Changes
