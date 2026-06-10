@@ -1,6 +1,6 @@
 {
   "name": "@tango-ts/server",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Declarative server entrypoint helpers for Tango apps.",
   "license": "MIT",
   "type": "module",
