@@ -1,0 +1,64 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "Tango",
+  "description": "Django REST Framework, rebuilt in TypeScript, for serverless APIs.",
+  "colors": {
+    "primary": "#E8590C",
+    "light": "#FF8C42",
+    "dark": "#C2410C"
+  },
+  "navigation": {
+    "groups": [
+      {
+        "group": "Getting Started",
+        "pages": ["index", "quickstart", "project-structure"]
+      },
+      {
+        "group": "Core Concepts",
+        "pages": [
+          "concepts/models",
+          "concepts/querying",
+          "concepts/serializers",
+          "concepts/viewsets",
+          "concepts/routing",
+          "concepts/migrations"
+        ]
+      },
+      {
+        "group": "Authentication",
+        "pages": [
+          "auth/authentication",
+          "auth/permissions",
+          "auth/contrib-auth"
+        ]
+      },
+      {
+        "group": "Beyond CRUD",
+        "pages": [
+          "guides/functions",
+          "guides/middleware",
+          "guides/openapi",
+          "guides/admin"
+        ]
+      },
+      {
+        "group": "Deployment",
+        "pages": [
+          "deployment/vercel",
+          "deployment/container",
+          "deployment/database"
+        ]
+      },
+      {
+        "group": "Reference",
+        "pages": ["reference/cli", "reference/packages"]
+      }
+    ]
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/bryanhoulton/tango"
+    }
+  }
+}

@@ -1,0 +1,89 @@
+---
+title: "Deploy in a Container"
+description: "Long-running Node deployments on Railway, Render, Fly.io, ECS, and friends."
+---
+
+Generated projects ship a `Dockerfile`, `.env.example`, and a `start` script
+for container platforms. The same `src/project.ts` that runs on Vercel runs
+here unchanged.
+
+## The release pipeline
+
+<Steps>
+  <Step title="Build">
+    ```sh
+    yarn build
+    ```
+  </Step>
+  <Step title="Check migrations in CI">
+    ```sh
+    yarn tango check
+    ```
+
+    Fails when model changes are missing migrations — before anything deploys.
+  </Step>
+  <Step title="Migrate during deployment">
+    ```sh
+    yarn tango migrate
+    ```
+
+    Run before traffic reaches the new code. Migrations are deploy-time
+    commands — request handling never runs schema changes.
+  </Step>
+  <Step title="Serve">
+    ```sh
+    yarn tango serve
+    ```
+
+    The container default command. It reads `HOST` / `PORT` from the
+    environment (container platforms set `PORT`), drains in-flight requests on
+    `SIGTERM`, and closes the database pool on shutdown.
+  </Step>
+</Steps>
+
+## The serve command
+
+`tango serve` loads a built Web handler and serves it through the Node
+adapter:
+
+```sh
+tango serve                          # defaults to ./dist/project.js
+tango serve --handler ./dist/server.js --host 127.0.0.1 --port 8000
+```
+
+For local development with rebuild-on-change:
+
+```sh
+tango dev --handler ./dist/project.js --watch ./src --build "yarn clean && yarn build"
+```
+
+The Node adapter (`@tango-ts/adapters`) caps request bodies while streaming
+(default 10 MiB, JSON 413 envelope), returns a JSON 500 envelope for
+unexpected handler errors, and reports the error to the configured logger so
+failures are never silent.
+
+## Configuration
+
+Database settings come from `TANGO_DB_*` variables or a single
+`TANGO_DATABASE_URL` (`mysql://user:pass@host:3306/db?ssl=true`). TLS is
+enabled with `TANGO_DB_SSL=true`. When `NODE_ENV=production`, missing database
+configuration fails at startup instead of falling back to development
+defaults. See [Database configuration](/deployment/database).
+
+## Production middleware
+
+Request logging with request IDs, security headers, CORS, and body-size limits
+are configured declaratively on the project:
+
+```ts
+import { cors, defineProject, requestLog, securityHeaders } from '@tango-ts/server'
+
+export const project = defineProject({
+  // ...
+  middleware: [
+    requestLog(),
+    securityHeaders(),
+    cors({ origins: ['https://app.example.com'] })
+  ]
+})
+```

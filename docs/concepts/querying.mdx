@@ -1,0 +1,149 @@
+---
+title: "Querying"
+description: "The manager and lazy QuerySet: Django's ORM query API, fully typed."
+---
+
+Every model carries a manager at `Model.objects` with a Django-style API. The
+ORM compiles queries to SQL via Kysely for MySQL — building a query never
+executes it.
+
+## Manager methods
+
+```ts
+const posts = await Post.objects.all()
+const drafts = await Post.objects.filter({ published: false })
+const recent = await Post.objects.exclude({ status: 'archived' })
+const post = await Post.objects.get({ id: 1 })
+const total = await Post.objects.count()
+
+const created = await Post.objects.create({ title: 'Hi', body: '...' })
+await Post.objects.update({ id: 1 }, { published: true })
+await Post.objects.delete({ id: 1 })
+```
+
+All inputs are inferred from the model: `create` takes `InferInsert`, filters
+take `Lookups` — wrong field names or value types fail to compile.
+
+## Lazy, immutable QuerySets
+
+`filter`, `exclude`, `orderBy`, `limit`, and `offset` return new QuerySets
+without touching the database. A QuerySet is thenable — awaiting it runs the
+query:
+
+```ts
+const qs = Post.objects
+  .filter({ published: true })
+  .orderBy('-createdAt', 'title')
+  .limit(20)
+  .offset(40)
+
+const rows = await qs // executes here
+const n = await qs.count() // SQL COUNT(*), not rows.length
+```
+
+`.compile()` (and `.compileCount()`) return the SQL and parameters without a
+database connection at all — handy for debugging and for unit-testing your
+queries:
+
+```ts
+const { sql, parameters } = Post.objects
+  .filter({ title__icontains: 'tango' })
+  .compile()
+```
+
+## Lookups
+
+Filter keys use Django's double-underscore lookup syntax. Available lookups
+are gated by the field's value type, so `title__gt` on a string field fails to
+compile:
+
+| Lookup | Meaning |
+| --- | --- |
+| `exact` (default) | Equality — `{ title: 'Hi' }` is `{ title__exact: 'Hi' }`. |
+| `in` | `IN (...)`. |
+| `isnull` | `IS NULL` / `IS NOT NULL`. |
+| `gt` / `gte` / `lt` / `lte` | Comparisons (numbers, dates). |
+| `contains` / `icontains` | Substring, case-sensitive / insensitive. |
+| `startswith` / `endswith` | Prefix / suffix match. |
+
+Case-sensitivity matches Django's behavior on MySQL.
+
+```ts
+await Post.objects.filter({
+  title__icontains: 'tango',
+  createdAt__gte: new Date('2026-01-01'),
+  status__in: ['draft', 'published']
+})
+```
+
+## Relation traversal
+
+FK fields expose relations by convention (`authorId` → `author`). Filtering
+through a relation compiles to a join:
+
+```ts
+// Single hop
+await Post.objects.filter({ author__email__icontains: 'x' })
+
+// Nested hops
+await Book.objects.filter({ author__organization__name: 'Labs' })
+
+// Reverse relations (declared via r.hasMany)
+await Organization.objects.filter({ authors__name__icontains: 'ada' })
+```
+
+## Eager loading with `selectRelated`
+
+`selectRelated` eager-loads FK targets in the same query and inflates the
+joined columns into nested objects on each row:
+
+```ts
+const posts = await Post.objects.selectRelated('author').all()
+posts[0].author.email // typed, no extra query
+
+// Nested relations work too:
+const books = await Book.objects.selectRelated('author__organization').all()
+books[0].author.organization.name
+```
+
+The result row shape is inferred from the FK targets — never hand-written.
+
+## Transactions
+
+`atomic(fn)` runs ORM work inside a transaction scoped to the current
+connection. Normal manager and QuerySet calls inside the callback participate
+automatically:
+
+```ts
+import { atomic } from '@tango-ts/orm'
+
+await atomic(async () => {
+  const user = await User.objects.create({ email: 'a@b.c', name: 'Ada' })
+  await Post.objects.create({ authorId: user.id, title: 'First' })
+})
+```
+
+If the callback throws, the transaction rolls back.
+
+<Note>
+  Internal [functions](/guides/functions) invoked inside `atomic()` do **not**
+  join the caller's transaction — they run in a fresh connection scope,
+  matching production semantics where each invocation may be a separate
+  serverless function.
+</Note>
+
+## Connections are request-scoped
+
+The ORM never holds a module-level connection. `defineProject` /
+`defineServer` wrap every request in `withConnection(db, ...)` using
+`AsyncLocalStorage`, so warm serverless instances cannot leak connections
+across requests. You only deal with this directly in scripts and tests:
+
+```ts
+import { createMysqlConnection, withConnection } from '@tango-ts/orm'
+
+const db = createMysqlConnection(config)
+await withConnection(db, async () => {
+  return Post.objects.count()
+})
+```

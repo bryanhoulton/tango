@@ -1,0 +1,75 @@
+---
+title: "Deploy to Vercel"
+description: "Generated projects deploy serverless out of the box."
+---
+
+Generated projects ship `api/index.ts` and `vercel.json` pre-wired — every path
+is rewritten into a single Vercel Function and Tango routes internally. The
+same `src/project.ts` runs unchanged locally, in a container, or on Vercel.
+
+```ts
+// api/index.ts (generated for you)
+import { vercelHandler } from '@tango-ts/adapters/vercel'
+import { project } from '../src/project.js'
+
+export default vercelHandler(project)
+```
+
+`vercelHandler` (a subpath export, so Vercel bundles never pull in
+`node:http`) wraps the project in Vercel's `fetch` web-handler export for the
+Node.js runtime.
+
+## Deploy
+
+Two commands from the project directory:
+
+```sh
+vercel env add TANGO_DATABASE_URL   # mysql://user:pass@host:3306/db?ssl=true
+vercel deploy
+```
+
+## Things to know
+
+<AccordionGroup>
+  <Accordion title="Node.js runtime only">
+    The Edge runtime is unsupported until an HTTP database driver lands —
+    mysql2 needs TCP sockets.
+  </Accordion>
+  <Accordion title="Connection pooling">
+    On Vercel the connection pool defaults to **1 connection per warm
+    instance** (tune with `TANGO_DB_POOL_SIZE`). Each warm instance holds its
+    own pool, so prefer a database that tolerates many connections —
+    PlanetScale, or RDS behind RDS Proxy.
+  </Accordion>
+  <Accordion title="PlanetScale rejects FOREIGN KEY constraints">
+    PlanetScale (Vitess) rejects FK constraint DDL. Declare references with
+    `f.foreignKey(() => Target, 'id', { dbConstraint: false })` — joins and
+    typing keep working, migrations just skip the constraint DDL (Django's
+    `db_constraint=False`).
+  </Accordion>
+  <Accordion title="Migrations run in CI, never in Vercel's build">
+    Preview deployments share production env vars, and a PR branch must never
+    alter the production schema. Run `tango check` on PRs and `tango migrate`
+    on merge to main — the generated project README includes a copy-paste
+    GitHub Action.
+  </Accordion>
+  <Accordion title="Internal functions use the http transport">
+    On Vercel, `fn.invoke()` defaults to a signed POST back to the deployment,
+    so each invocation gets its own timeout and memory budget. Set
+    `TANGO_FUNCTIONS_SECRET`, and enable **Protection Bypass for Automation**
+    if Deployment Protection covers the deployment URL. See
+    [Internal Functions](/guides/functions).
+  </Accordion>
+</AccordionGroup>
+
+## Serving the admin UI
+
+If you use the [admin](/guides/admin), make the Vercel build command copy the
+prebuilt SPA into your static directory:
+
+```sh
+cp -r node_modules/@tango-ts/admin-ui/dist public/admin
+```
+
+Static files win over the catch-all rewrite, so `/admin/` is served from the
+CDN while `/admin/api/*` is routed to the function.

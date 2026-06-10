@@ -1,0 +1,97 @@
+---
+title: "Routing"
+description: "Explicit route registration over Web-standard requests."
+---
+
+Tango routing is deterministic and declarative: routes are registered
+explicitly, there is no filesystem routing, and the core only speaks
+Web-standard `Request` / `Response` — no Express-style request objects.
+
+## Declaring routes
+
+Application code uses `defineRoutes` with `route(...)` entries:
+
+```ts
+import { defineRoutes, route } from '@tango-ts/router'
+import { jsonResponse } from '@tango-ts/http'
+import { modelViewSet } from '@tango-ts/views'
+
+export const routes = defineRoutes([
+  // A viewset (a "routable") mounted under a base path:
+  route('/posts', modelViewSet({ model: Post, serializer: PostSerializer })),
+
+  // A direct handler:
+  route('GET', '/health/live/', async () => jsonResponse({ status: 'ok' }))
+])
+```
+
+Handlers receive a `RequestContext` and return a Web `Response`.
+
+## Nesting apps with `include`
+
+App route collections compose under project-level prefixes with `include`,
+preserving route metadata for OpenAPI:
+
+```ts
+import { defineRoutes, include } from '@tango-ts/router'
+
+import { routes as coreRoutes } from './apps/core/routes.js'
+
+export const routes = defineRoutes([include('/core', coreRoutes)])
+```
+
+In practice you rarely write this yourself — `defineProject({ apps: [...] })`
+mounts each app at `/<name>` (or its configured `path`) automatically.
+
+## The request context
+
+`@tango-ts/http` owns the runtime-agnostic primitives every handler sees:
+
+```ts
+route('GET', '/posts/:id/preview/', async (ctx) => {
+  ctx.params.id            // path params from the router
+  ctx.query.get('draft')   // URLSearchParams
+  ctx.user                 // set by authentication, if any
+  const body = await ctx.json() // lazy – parsed only when asked
+  return jsonResponse({ ok: true })
+})
+```
+
+Response helpers:
+
+```ts
+import { detailResponse, jsonResponse } from '@tango-ts/http'
+
+jsonResponse({ id: 1 }, { status: 201 })
+detailResponse('Not found.', 404) // { "detail": "Not found." }
+```
+
+## Error envelopes
+
+The router returns DRF-like `{ detail }` envelopes:
+
+- Unmatched path → **404** `{ "detail": "Not found." }`
+- Matched path, wrong method → **405**
+
+## The lower-level router
+
+`createRouter()` remains the lower-level primitive beneath `defineRoutes`:
+
+```ts
+import { createRouter } from '@tango-ts/router'
+
+const router = createRouter()
+router.add('GET', '/ping/', async () => jsonResponse({ pong: true }))
+router.register('/posts', postViewSet)
+
+const response = await router.handle(request)
+```
+
+Prefer `defineRoutes([route(...)])` in application code; the router object is
+for adapters, tests, and framework internals.
+
+<Note>
+  Database and auth state are supplied outside the router lifecycle — there
+  are no request globals. `defineProject` wires the request-scoped database
+  connection and project-level authentication around route handling.
+</Note>

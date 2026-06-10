@@ -1,0 +1,111 @@
+---
+title: "Admin"
+description: "A Django-style admin, split in half for serverless."
+---
+
+Tango ships a Django-style admin, split in half for serverless:
+
+- **`@tango-ts/admin`** — the server half: pure JSON endpoints (model
+  metadata, staff-gated auth, CRUD viewsets) registered on the project.
+- **`@tango-ts/admin-ui`** — the browser half: a prebuilt React SPA served as
+  static assets.
+
+Your server code never imports the UI package, so the admin adds no React (or
+any frontend code) to your serverless function bundle — the UI is just static
+files on the CDN.
+
+## Registering models
+
+The same pattern as `addOpenApiRoute`, in `src/project.ts`:
+
+```ts
+import { addAdminRoutes, adminModel } from '@tango-ts/admin'
+
+addAdminRoutes(project, {
+  models: [
+    adminModel(Post, {
+      listDisplay: ['id', 'title', 'published'],
+      searchFields: ['title'],
+      listFilters: ['published']
+    })
+  ]
+})
+```
+
+`adminModel(Post)` with no options also works: every field is shown, primary
+keys and auto-managed timestamps are read-only, and lists sort by primary key.
+Field names are typechecked against the model.
+
+The UI sidebar groups models by app, resolved automatically from the project's
+app registry. Override with `adminModel(Post, { app: 'blog' })`; models owned
+by no app fall into an "Other" section.
+
+## Auth
+
+The admin authenticates with the [contrib-auth](/auth/contrib-auth) token
+model and only admits `isStaff` / `isSuperuser` users:
+
+```sh
+yarn tango migrate --app node_modules/@tango-ts/contrib-auth/dist/app.js
+yarn tango createsuperuser --email you@example.com
+```
+
+Log in at `POST /admin/api/auth/login/`; every admin endpoint requires
+`Authorization: Bearer tango_...` plus the staff flags.
+
+## Serving the UI
+
+Copy the prebuilt assets into your static directory — on Vercel, make the
+build command:
+
+```sh
+cp -r node_modules/@tango-ts/admin-ui/dist public/admin
+```
+
+Static files win over the catch-all rewrite, so `/admin/` is served from the
+CDN while `/admin/api/*` is routed to the function. The SPA uses hash routing
+and relative asset URLs, so no extra rewrites are needed. Log in at `/admin/`.
+
+## What you get
+
+- A sidebar of registered models, grouped by app.
+- List views with search (`searchFields`), filters (`listFilters`), and
+  server-side pagination.
+- Create/edit modals with widgets per column type and per-field validation
+  errors straight from the serializer.
+- Foreign-key pickers that search the related model.
+- Delete confirmations.
+- Fields declared with `.choices([...])` render as selects, both as list
+  filters and in forms.
+- A **Functions** section listing the project's
+  [internal functions](/guides/functions) — staff can run one from the UI with
+  a JSON payload, through the project's configured function transport, exactly
+  like `fn.invoke()` from application code. Pass `functions` to
+  `addAdminRoutes` to expose a different set (or `[]` to hide them).
+
+## Routes
+
+Mounted under `/admin/api` by default:
+
+| Route | Purpose |
+| --- | --- |
+| `POST /auth/login/` | Staff-only login → `{ token, user }` |
+| `POST /auth/logout/` | Revoke the presented token |
+| `GET /auth/me/` | The authenticated admin user |
+| `GET /meta/` | Site schema — models, fields, relations, list config |
+| `POST /functions/:app/:name/` | Run an admin-exposed function: `{ payload }` → `{ result }` |
+| `GET/POST /<table>/` | List (paginated) and create |
+| `GET/PATCH/DELETE /<table>/:id/` | Retrieve, partial update, delete |
+
+The CRUD endpoints are regular `modelViewSet`s configured with full-field
+serializers, admin authentication, and `icontains` filters for each
+`searchFields` entry — pagination, filtering, and ordering behave exactly like
+any other Tango viewset.
+
+<Note>
+  `GET /meta/` returns everything the generic UI needs: each model's fields
+  (type, nullable, read-only, required, max length, choices), foreign keys
+  resolved to their admin endpoints with a display field for pickers, list
+  configuration, and pagination. The UI is identical for every project — all
+  per-project shape lives in this document.
+</Note>

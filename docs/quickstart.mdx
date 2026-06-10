@@ -1,0 +1,184 @@
+---
+title: "Quickstart"
+description: "Scaffold a Tango project and ship a typed CRUD resource."
+---
+
+## Create a project
+
+Scaffold a new project with the CLI:
+
+```sh
+yarn dlx @tango-ts/cli startproject shop
+cd shop
+yarn install
+```
+
+The generated project is intentionally small:
+
+```txt
+shop/
+  package.json
+  tsconfig.json
+  src/
+    project.ts
+    routes.ts
+    apps/
+      core/
+        app.ts
+        models.ts
+        serializers.ts
+        routes.ts
+        functions/
+        migrations/
+```
+
+Run it locally:
+
+```sh
+yarn serve
+```
+
+Then check the default health routes:
+
+```sh
+curl http://127.0.0.1:8000/health/live/
+curl http://127.0.0.1:8000/core/health/live/
+```
+
+## Build your first resource
+
+<Steps>
+  <Step title="Declare a model">
+    The model is the single source of truth — query shapes, validation,
+    migrations, and OpenAPI metadata all derive from it. In
+    `src/apps/core/models.ts`:
+
+    ```ts
+    import { f, model } from '@tango-ts/orm'
+
+    export const Post = model('posts', {
+      id: f.int().primaryKey().autoIncrement(),
+      title: f.varchar(255),
+      body: f.text(),
+      published: f.boolean().default(false)
+    })
+
+    export const models = [Post] as const
+    ```
+  </Step>
+  <Step title="Add a serializer">
+    The serializer is the DRF-style boundary for validation and output. In
+    `src/apps/core/serializers.ts`:
+
+    ```ts
+    import { modelSerializer } from '@tango-ts/serializers'
+
+    import { Post } from './models.js'
+
+    export const PostSerializer = modelSerializer(Post, {
+      fields: ['id', 'title', 'body', 'published'] as const,
+      readOnlyFields: ['id'] as const
+    })
+    ```
+  </Step>
+  <Step title="Register a viewset">
+    A model plus a serializer is enough for list, retrieve, create, patch, and
+    delete routes. In `src/apps/core/routes.ts`:
+
+    ```ts
+    import { defineRoutes, route } from '@tango-ts/router'
+    import { modelViewSet } from '@tango-ts/views'
+
+    import { Post } from './models.js'
+    import { PostSerializer } from './serializers.js'
+
+    export const routes = defineRoutes([
+      route('/posts', modelViewSet({ model: Post, serializer: PostSerializer }))
+    ])
+
+    export default routes
+    ```
+  </Step>
+  <Step title="Generate and apply the migration">
+    ```sh
+    yarn makemigrations
+    yarn migrate
+    ```
+
+    By default, `mysqlFromEnv()` reads `TANGO_DB_HOST`, `TANGO_DB_PORT`,
+    `TANGO_DB_USER`, `TANGO_DB_PASSWORD`, and `TANGO_DB_NAME`. If
+    `TANGO_DB_NAME` is not set, the generated project derives a database name
+    from the project name. See [Database configuration](/deployment/database)
+    for all options.
+  </Step>
+  <Step title="Try it">
+    ```sh
+    yarn serve
+    curl http://127.0.0.1:8000/core/posts/
+    curl -X POST http://127.0.0.1:8000/core/posts/ \
+      -H 'content-type: application/json' \
+      -d '{"title":"First post","body":"Hello from Tango."}'
+    ```
+  </Step>
+</Steps>
+
+## How it fits together
+
+`src/project.ts` is the project entrypoint. It creates a Web handler by
+combining the root routes, a list of apps, and the database connection:
+
+```ts
+import { addOpenApiRoute } from '@tango-ts/openapi'
+import { defineProject, mysqlFromEnv } from '@tango-ts/server'
+
+import { app as coreApp } from './apps/core/app.js'
+import { routes } from './routes.js'
+
+export const project = defineProject({
+  name: 'shop',
+  database: mysqlFromEnv({ projectName: 'shop' }),
+  routes,
+  apps: [coreApp]
+})
+
+// Serves the generated OpenAPI 3.1 document at GET /openapi.json.
+addOpenApiRoute(project)
+
+export default project
+```
+
+Each app declares itself in one object — models, routes, and internal
+functions together (`src/apps/core/app.ts`):
+
+```ts
+import { defineApp } from '@tango-ts/server'
+
+import { functions } from './functions/index.js'
+import { models } from './models.js'
+import { routes } from './routes.js'
+
+export const app = defineApp({
+  name: 'core', // mounts at /core by default (override with `path`)
+  models,
+  routes,
+  functions,
+  migrationsDir: new URL('./migrations', import.meta.url).pathname
+})
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Models & fields" icon="table" href="/concepts/models">
+    Field builders, choices, foreign keys, and relations.
+  </Card>
+  <Card title="Viewsets" icon="layer-group" href="/concepts/viewsets">
+    Filters, pagination, custom actions, and permissions.
+  </Card>
+  <Card title="Deploy to Vercel" icon="cloud" href="/deployment/vercel">
+    Generated projects deploy serverless out of the box.
+  </Card>
+  <Card title="Admin" icon="gauge" href="/guides/admin">
+    A Django-style admin, split in half for serverless.
+  </Card>
+</CardGroup>

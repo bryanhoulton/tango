@@ -1,0 +1,83 @@
+---
+title: "OpenAPI"
+description: "An OpenAPI 3.1 document generated from the same declarations that serve requests."
+---
+
+Tango generates OpenAPI 3.1 from the declarative router, viewset, model, and
+serializer metadata. There are no hand-written endpoint schemas for normal
+`ModelViewSet` routes — the document derives from the same model and serializer
+configuration used at runtime, so it cannot drift.
+
+## Serving the document
+
+Generated projects use `addOpenApiRoute`:
+
+```ts
+import { addOpenApiRoute } from '@tango-ts/openapi'
+
+export const project = defineProject({ ... })
+
+// GET /openapi.json
+addOpenApiRoute(project)
+```
+
+The document is generated lazily on first request and cached. Options:
+
+```ts
+addOpenApiRoute(project, {
+  path: '/docs/openapi.json',
+  title: 'Shop API',
+  version: '1.2.0'
+})
+```
+
+`info.title` defaults to the project name and `info.version` to `0.0.0`.
+
+## Generating directly
+
+```ts
+import { generateOpenApi } from '@tango-ts/openapi'
+
+const doc = generateOpenApi(project)
+// or, with an explicit router:
+const doc2 = generateOpenApi(router, { title: 'Shop API', version: '1.0.0' })
+```
+
+## What gets generated
+
+- Paths and operations for list, create, retrieve, patch, and delete routes,
+  plus custom `ModelViewSet` actions.
+- Component schemas inferred from model fields — `.choices([...])` fields emit
+  an `enum`.
+- Input schemas that omit serializer read-only fields.
+- Nested serializer metadata flows into response schemas.
+
+The internal function dispatch route (`/_tango/...`) is never emitted.
+
+## Overrides
+
+Per-operation overrides are the escape hatch for overridden handlers and
+custom actions — parameters, request bodies, responses, tags, and operation
+IDs can be published exactly without hand-writing the whole document:
+
+```ts
+modelViewSet({
+  model: User,
+  serializer: UserSerializer,
+  actions: [
+    {
+      name: 'export',
+      method: 'GET',
+      path: 'export',
+      detail: false,
+      handler: exportHandler,
+      openApi: {
+        tags: ['users'],
+        responses: {
+          '200': { description: 'CSV export of all users.' }
+        }
+      }
+    }
+  ]
+})
+```

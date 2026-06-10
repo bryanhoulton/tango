@@ -1,0 +1,70 @@
+---
+title: "Permissions"
+description: "DRF-style permission classes, including object-level checks."
+---
+
+Permission classes decide access after authentication has resolved the user.
+Denial maps to a **403** with a DRF-style `{ detail }` envelope (versus **401**
+for missing/invalid credentials).
+
+## Built-in classes
+
+| Class | Allows |
+| --- | --- |
+| `AllowAny` | Everyone — useful to make intent explicit. |
+| `IsAuthenticated` | Requests with a resolved `ctx.user`. |
+| `IsAdminUser` | Users with the staff flag (powered by `isStaff` on the contrib-auth user). |
+
+```ts
+import { IsAuthenticated } from '@tango-ts/auth'
+
+modelViewSet({
+  model: Post,
+  serializer: PostSerializer,
+  authentication: [authTokenAuthentication()],
+  permissions: [IsAuthenticated]
+})
+```
+
+## Object-level permissions
+
+A permission class may implement `hasObjectPermission(ctx, obj)` — DRF's
+`has_object_permission`. Viewsets call it for **detail actions** after the row
+is fetched and before any write:
+
+```ts
+const IsAuthor = {
+  hasPermission: (ctx) => ctx.user !== undefined,
+  hasObjectPermission: (ctx, post) => post.authorId === ctx.user?.id
+}
+```
+
+For one-off cases, the viewset offers a shorthand:
+
+```ts
+modelViewSet({
+  model: Post,
+  serializer: PostSerializer,
+  objectPermission: (ctx, row) => row.authorId === ctx.user?.id
+})
+```
+
+The order of checks for a detail request:
+
+1. Authentication resolves `ctx.user` (invalid credentials → 401).
+2. Permission classes run (`hasPermission` denial → 403).
+3. The row is fetched through the scoped queryset (out of scope → 404).
+4. Object-level permissions run (`hasObjectPermission` / `objectPermission`
+   denial → 403).
+5. The view logic executes.
+
+Custom detail actions go through the same object-resolution path as the
+built-in detail routes, so scoping and object permissions cannot be skipped.
+
+## Per-action overrides
+
+Custom viewset actions can declare their own `permissions` (and
+`authentication`), which **replace** the viewset-level classes for that action
+— including the object-level pass for detail actions. This is DRF's
+`@action(permission_classes=...)`. See
+[Custom actions](/concepts/viewsets#custom-actions).

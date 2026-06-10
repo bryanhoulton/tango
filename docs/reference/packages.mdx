@@ -1,0 +1,57 @@
+---
+title: "Packages"
+description: "The @tango-ts/* packages and what each one is for."
+---
+
+Tango ships as focused packages under the `@tango-ts/*` scope. Generated
+projects come with the right ones installed; this page is the map of what
+lives where.
+
+| Package | What it gives you |
+| --- | --- |
+| [`@tango-ts/orm`](/concepts/querying) | Models and queries: `f.*` field builders, `model()`, the lazy QuerySet with Django-style lookups, relation traversal, `selectRelated`, and `atomic` transactions. Compiles to SQL via Kysely for MySQL. |
+| `@tango-ts/core-types` | The inferred types behind everything (`InferSelect`, `InferInsert`, `InferUpdate`, `Lookups`). You rarely import it — your models carry these types automatically. |
+| [`@tango-ts/migrations`](/concepts/migrations) | The migration engine behind `tango makemigrations` / `check` / `migrate`: diffs your models into reversible MySQL migrations and applies them at deploy time. |
+| [`@tango-ts/serializers`](/concepts/serializers) | DRF-style validation and output: `modelSerializer`, typed input/output, DRF-shaped error maps, nested serializers, and `save()`. |
+| [`@tango-ts/views`](/concepts/viewsets) | `modelViewSet` — typed CRUD routes with filters, pagination, ordering, queryset scoping, object permissions, and custom actions. |
+| [`@tango-ts/router`](/concepts/routing) | Route declaration: `defineRoutes`, `route`, `include`, path params, and DRF-like 404/405 envelopes over Web-standard requests. |
+| [`@tango-ts/http`](/concepts/routing#the-request-context) | What your handlers see: `RequestContext`, `jsonResponse` / `detailResponse`, and the middleware built-ins. |
+| [`@tango-ts/auth`](/auth/authentication) | Authentication and permission classes, plus `apiView` for protecting plain routes. |
+| [`@tango-ts/contrib-auth`](/auth/contrib-auth) | Batteries-included auth: `User` and `AuthToken` models, Django-compatible password hashing, login/logout/me routes, and `authTokenAuthentication()`. |
+| [`@tango-ts/functions`](/guides/functions) | Internal serverless functions: `defineFunction`, `createFunctionRegistry`, and `invoke` / `defer`. |
+| [`@tango-ts/server`](/project-structure) | Your entrypoints: `defineApp`, `defineProject`, `mysqlFromEnv`, and the middleware re-exports. |
+| [`@tango-ts/openapi`](/guides/openapi) | `addOpenApiRoute` / `generateOpenApi` — an OpenAPI 3.1 document derived from your routes, models, and serializers. |
+| [`@tango-ts/adapters`](/deployment/container) | Runs your project on a platform: the Node HTTP server and `vercelHandler` (via `@tango-ts/adapters/vercel`). Generated projects wire these for you. |
+| [`@tango-ts/admin`](/guides/admin) | `addAdminRoutes` / `adminModel` — the admin's JSON API. |
+| [`@tango-ts/admin-ui`](/guides/admin) | The admin's prebuilt React SPA, served as static assets. Never imported by your server code. |
+| [`@tango-ts/cli`](/reference/cli) | The `tango` command: `startproject`, `startapp`, `makemigrations`, `check`, `migrate`, `createsuperuser`, `serve`, and `dev`. |
+
+## What you'll actually import
+
+In a typical project, your code touches a handful of these directly — the rest
+work behind the scenes:
+
+```ts
+import { f, model, atomic } from '@tango-ts/orm'            // models & queries
+import { modelSerializer } from '@tango-ts/serializers'      // validation & output
+import { modelViewSet } from '@tango-ts/views'               // CRUD routes
+import { defineRoutes, route, include } from '@tango-ts/router'
+import { jsonResponse, detailResponse } from '@tango-ts/http'
+import { defineApp, defineProject, mysqlFromEnv } from '@tango-ts/server'
+import { defineFunction, createFunctionRegistry } from '@tango-ts/functions'
+import { addOpenApiRoute } from '@tango-ts/openapi'
+import { IsAuthenticated, apiView } from '@tango-ts/auth'
+import { authTokenAuthentication, authRoutes } from '@tango-ts/contrib-auth'
+import { addAdminRoutes, adminModel } from '@tango-ts/admin'
+```
+
+`@tango-ts/core-types`, `@tango-ts/migrations`, and `@tango-ts/adapters` are
+mostly consumed for you — types are inferred from your models, migrations run
+through the CLI, and generated projects come with the Node and Vercel adapters
+already wired.
+
+<Note>
+  Always import from the package root (`@tango-ts/orm`, not a deep path). The
+  one intentional exception is `@tango-ts/adapters/vercel`, a subpath export
+  that keeps `node:http` out of Vercel bundles.
+</Note>

@@ -1,0 +1,115 @@
+---
+title: "Serializers"
+description: "DRF-style validation and output, typed from the model."
+---
+
+Serializers are the boundary between your models and the outside world. They
+turn model definitions into typed serializers: configured output fields, typed
+input data, runtime validation, DRF-shaped error maps, and `save()` through the
+real ORM manager.
+
+```ts
+import { modelSerializer } from '@tango-ts/serializers'
+
+import { Post } from './models.js'
+
+export const PostSerializer = modelSerializer(Post, {
+  fields: ['id', 'title', 'body', 'published'] as const,
+  readOnlyFields: ['id'] as const
+})
+```
+
+- `fields` — the fields included in output and accepted as input.
+- `readOnlyFields` — included in output, rejected as input (like DRF's
+  `read_only_fields`).
+
+Both lists are typechecked against the model — a typo fails to compile.
+
+## Output
+
+`serialize(row)` returns only the configured fields, with inferred output
+types:
+
+```ts
+const post = await Post.objects.get({ id: 1 })
+const data = PostSerializer.serialize(post)
+// { id: number; title: string; body: string; published: boolean }
+```
+
+## Two input paths
+
+There are two ways to feed a serializer, depending on whether you trust the
+data:
+
+<CodeGroup>
+
+```ts Trusted (forInput)
+// Compile-time checked against writable model fields.
+const serializer = PostSerializer.forInput({
+  title: 'Hello',
+  body: 'From application code.'
+})
+```
+
+```ts Untrusted (forUnknownInput)
+// Validates request payloads at runtime.
+const payload = await ctx.json()
+const serializer = PostSerializer.forUnknownInput(payload)
+```
+
+</CodeGroup>
+
+Then run validation and save:
+
+```ts
+if (!serializer.isValid()) {
+  return jsonResponse(serializer.errors, { status: 400 })
+}
+
+serializer.validatedData // typed
+const created = await serializer.save() // calls Post.objects.create(...)
+```
+
+`errors` is a DRF-shaped error map — field names to arrays of messages.
+Validation envelope parity is tested against real DRF.
+
+<Note>
+  `datetime` and `date` fields accept ISO 8601 strings over JSON. They are
+  validated against explicit patterns (not `new Date(...)` parsing) and
+  normalized to `Date` for the ORM.
+</Note>
+
+## Nested serializers
+
+Read-only nested serializers mirror DRF's
+`author = AuthorSerializer(read_only=True)`:
+
+```ts
+const AuthorSerializer = modelSerializer(User, {
+  fields: ['id', 'name', 'email'] as const
+})
+
+const PostSerializer = modelSerializer(Post, {
+  fields: ['id', 'title', 'authorId'] as const,
+  readOnlyFields: ['id'] as const,
+  nested: { author: AuthorSerializer }
+})
+```
+
+- `nested` keys are the model's relation names (`authorId` → `author`) and are
+  typechecked against the related model.
+- `serialize` then requires the related row — exactly what
+  `selectRelated('author')` returns, recursively for multi-level nesting — and
+  renders a missing relation as `null`.
+- Nested keys are **output-only**: in input they are silently ignored (DRF
+  parity) and never satisfy required writable fields.
+
+```ts
+const post = await Post.objects.selectRelated('author').get({ id: 1 })
+PostSerializer.serialize(post)
+// { id, title, authorId, author: { id, name, email } }
+```
+
+When a viewset's serializer declares `nested`, the viewset automatically
+`selectRelated`s every nested relation path — see
+[Viewsets](/concepts/viewsets).

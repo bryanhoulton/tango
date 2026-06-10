@@ -1,0 +1,83 @@
+---
+title: "Migrations"
+description: "Schema migrations generated from model snapshots, applied at deploy time."
+---
+
+Migrations derive from the same field specs that drive the ORM — there is no
+separate schema declaration. The workflow mirrors Django:
+
+```sh
+yarn makemigrations   # diff models against the last migration, write a file
+yarn migrate          # apply pending migrations to the database
+```
+
+## How it works
+
+1. `makemigrations` takes a snapshot of your current model definitions and
+   diffs it against the snapshot stored in your latest migration file.
+2. The difference becomes a deterministic, ordered list of reversible
+   operations — create table, add column, alter column, rename column, add
+   unique, and so on (with a raw-SQL escape hatch when you need it).
+3. Each operation carries forward **and** reverse MySQL DDL, so migrations can
+   be rolled back.
+4. `migrate` applies pending migrations to your database, recording each one
+   in a `tango_migrations` table.
+
+Diffing never touches a database, so `makemigrations` and `check` run anywhere
+— CI included — without a connection. Applying runs at deploy time, **never**
+during request handling.
+
+<Note>
+  Generated migration files are plain, typed TypeScript checked into your
+  repo. Each one stores the schema snapshot it produces, so the next
+  `makemigrations` diffs against that — there is no replay of history.
+</Note>
+
+## Renames are never guessed
+
+A dropped column plus an added column is ambiguous: it could be a rename or a
+genuine drop+add. Tango never resolves this silently — `makemigrations`
+surfaces the ambiguity and fails loudly unless you say which it is (via prompt
+or a `renamedFrom()` hint on the field). Your data is never dropped on a
+guess.
+
+## Checking in CI
+
+`tango check` fails when models changed without a migration:
+
+```sh
+yarn tango check
+```
+
+Run it on every PR. The generated project README includes a copy-paste GitHub
+Action that runs `tango check` on PRs and `tango migrate` on merge to main.
+
+<Warning>
+  On Vercel, never run migrations in the build step — preview deployments
+  share production env vars, and a PR branch must never alter the production
+  schema. Migrations belong in CI/CD. See [Deploy to
+  Vercel](/deployment/vercel).
+</Warning>
+
+## Applying migrations
+
+`tango migrate` creates the target database if it does not exist yet, then
+applies pending migrations. Managed MySQL that forbids `CREATE DATABASE`
+(PlanetScale) is fine as long as the target database already exists and is
+reachable.
+
+To migrate a packaged app — for example the built-in auth app:
+
+```sh
+yarn tango migrate --app node_modules/@tango-ts/contrib-auth/dist/app.js
+```
+
+## PlanetScale / Vitess
+
+PlanetScale rejects `FOREIGN KEY` constraints. Declare references with
+`dbConstraint: false` — joins and typing keep working, and migrations simply
+skip the constraint DDL:
+
+```ts
+authorId: f.foreignKey(() => User, 'id', { dbConstraint: false })
+```

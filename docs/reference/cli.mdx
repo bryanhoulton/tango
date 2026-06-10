@@ -1,0 +1,116 @@
+---
+title: "CLI"
+description: "Management commands: scaffolding, migrations, superusers, and serving."
+---
+
+`@tango-ts/cli` provides Tango's management commands. In generated projects
+the common ones are wrapped as yarn scripts (`yarn makemigrations`,
+`yarn migrate`, `yarn serve`).
+
+## startproject
+
+Scaffold a new project:
+
+```sh
+yarn dlx @tango-ts/cli startproject shop
+```
+
+Copies the default project template — including deployment assets
+(`Dockerfile`, `.dockerignore`, `.env.example`, `.gitignore`, `README.md`, and
+the Vercel entrypoint `api/index.ts` + `vercel.json`) — into the target
+directory. Templates are real directories shipped with the package, so the
+generated layout is easy to inspect.
+
+## startapp
+
+Scaffold a new app inside a project:
+
+```sh
+yarn tango startapp billing --directory src/apps/billing
+```
+
+Then import the app in `src/project.ts` and add it to `apps`.
+
+## makemigrations
+
+```sh
+yarn tango makemigrations
+```
+
+Builds the current model snapshot, diffs it against the latest source
+migration's snapshot, and writes a typed TypeScript migration file (exporting
+`migration` and `snapshotAfter`). Ambiguous rename candidates fail loudly
+rather than being guessed — see [Migrations](/concepts/migrations).
+
+Generated projects read, check, and write migrations in `src`, then clean and
+build before running compiled migrations from `dist`.
+
+## check
+
+```sh
+yarn tango check
+```
+
+Fails when models changed without a migration. Run it on every PR. Detection
+is pure and database-free, so it runs anywhere CI does.
+
+## migrate
+
+```sh
+yarn tango migrate
+yarn tango migrate --app node_modules/@tango-ts/contrib-auth/dist/app.js
+```
+
+Applies generated migrations through the shared executor. Connects at the
+server level, creates the target database when needed, then reconnects to that
+database. Deploy-time only — never run during request handling.
+
+## createsuperuser
+
+```sh
+yarn tango createsuperuser --email you@example.com
+```
+
+Bootstraps an `isStaff` + `isSuperuser` user via
+[contrib-auth](/auth/contrib-auth). Pass `--password`, or set
+`TANGO_SUPERUSER_PASSWORD` to keep the password out of shell history. Requires
+the contrib-auth migrations to be applied.
+
+## serve
+
+```sh
+tango serve
+tango serve --handler ./dist/server.js --host 127.0.0.1 --port 8000
+```
+
+Serves a built Web handler. Defaults to `./dist/project.js` in generated
+projects. When `--host` / `--port` are not passed, reads `HOST` / `PORT` from
+the environment (defaulting to `127.0.0.1:8000`). Blocks until `SIGINT` /
+`SIGTERM`, drains in-flight requests (with a force-close timeout), and calls
+the project's `dispose()` to release the database pool.
+
+The handler module can export a Web handler function or a router-like object
+with `handle(request)`:
+
+<CodeGroup>
+
+```ts Web handler
+export default async function handler(request: Request): Promise<Response> {
+  return router.handle(request)
+}
+```
+
+```ts Router-like
+export default router
+```
+
+</CodeGroup>
+
+## dev
+
+```sh
+tango dev --handler ./dist/project.js --watch ./src --build "yarn clean && yarn build"
+```
+
+Watches source files, runs the configured build command, and reloads the built
+handler after successful rebuilds.

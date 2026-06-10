@@ -1,0 +1,69 @@
+---
+title: "Database Configuration"
+description: "How Tango resolves MySQL connection settings."
+---
+
+Tango targets MySQL (including PlanetScale/Vitess). Connection configuration
+has a single resolution path, shared by `mysqlFromEnv()` (in projects) and the
+CLI's `migrate` command:
+
+1. Explicit options passed in code
+2. `TANGO_DATABASE_URL` / `DATABASE_URL`
+3. `TANGO_DB_*` variables
+4. Development defaults
+
+<Warning>
+  When `NODE_ENV=production`, missing database configuration fails at startup
+  instead of falling back to development defaults.
+</Warning>
+
+## Environment variables
+
+| Variable | Meaning |
+| --- | --- |
+| `TANGO_DATABASE_URL` | Single connection URL: `mysql://user:pass@host:3306/db?ssl=true`. |
+| `TANGO_DB_HOST` | Host. |
+| `TANGO_DB_PORT` | Port. |
+| `TANGO_DB_USER` | User. |
+| `TANGO_DB_PASSWORD` | Password. |
+| `TANGO_DB_NAME` | Database name. Generated projects fall back to a name derived from the project name. |
+| `TANGO_DB_SSL` | `true` to enable TLS. |
+| `TANGO_DB_POOL_SIZE` | Connection pool size. On Vercel this defaults to 1 per warm instance. |
+
+## In a project
+
+```ts
+import { defineProject, mysqlFromEnv } from '@tango-ts/server'
+
+export const project = defineProject({
+  name: 'shop',
+  database: mysqlFromEnv({ projectName: 'shop' }),
+  routes,
+  apps: [coreApp]
+})
+```
+
+`mysqlFromEnv({ projectName })` uses the project name as the fallback database
+name when `TANGO_DB_NAME` is not configured.
+
+## Request-scoped connections
+
+The ORM never holds a module-level connection. Every request runs inside
+`withConnection(db, ...)` via `AsyncLocalStorage`, wired by
+`defineProject` / `defineServer` — warm serverless instances cannot leak
+connections across requests. The project handler's `dispose()` releases the
+pool at process shutdown.
+
+## Database creation
+
+`tango migrate` connects at the server level, creates the configured database
+when it does not exist yet (carrying the configured TLS settings), then
+reconnects to that database. Managed MySQL that forbids `CREATE DATABASE`
+(PlanetScale) is tolerated as long as the target database is reachable.
+
+## PlanetScale
+
+- Declare foreign keys with `dbConstraint: false` — Vitess rejects FK
+  constraint DDL. See [Models](/concepts/models#dbconstraint-false).
+- PlanetScale tolerates many connections, which suits Vercel's
+  one-pool-per-warm-instance model well.

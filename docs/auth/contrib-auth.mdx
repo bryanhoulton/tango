@@ -1,0 +1,135 @@
+---
+title: "Built-in Auth (contrib-auth)"
+description: "A batteries-included User model, token auth, and login routes."
+---
+
+`@tango-ts/contrib-auth` is Tango's `django.contrib.auth` +
+`rest_framework.authtoken`: a built-in `User` model with secure password
+hashing, a database-backed opaque `AuthToken` model, token-issuing routes, and
+a ready-made authentication class that plugs into viewsets.
+
+## The models
+
+**`User`** (`auth_users`): email login, password hashes stored in Django's
+exact `pbkdf2_sha256` encoded format, `isActive` / `isStaff` / `isSuperuser`
+flags (which power `IsAdminUser`), `dateJoined`, and `lastLogin`.
+
+**`AuthToken`** (`auth_tokens`): opaque `tango_`-prefixed bearer tokens. Only
+the SHA-256 of a token is stored — plaintext is returned once, at issue time.
+Tokens support optional expiry (`expiresAt`) and `lastUsedAt` tracking
+(throttled to one write per minute per token).
+
+<Note>
+  Password hashes use Django's storage format
+  (`pbkdf2_sha256$<iterations>$<salt>$<b64>`), so hashes migrate between
+  Django and Tango projects unchanged — parity is tested against real Django.
+</Note>
+
+## Setup
+
+Apply the shipped migration, then create the first account:
+
+```sh
+yarn tango migrate --app node_modules/@tango-ts/contrib-auth/dist/app.js
+yarn tango createsuperuser --email you@example.com
+```
+
+The password may come from `TANGO_SUPERUSER_PASSWORD` to stay out of shell
+history. The shipped migration declares FKs with `dbConstraint: false`, so the
+schema deploys on PlanetScale/Vitess; token verification re-fetches the user
+row, so deleted or deactivated users lose access without a database cascade.
+
+## Auth routes
+
+`authRoutes()` produces a router you can mount:
+
+```ts
+import { authRoutes } from '@tango-ts/contrib-auth'
+import { defineRoutes, include } from '@tango-ts/router'
+
+export const routes = defineRoutes([include('/auth', authRoutes())])
+```
+
+| Route | Behavior |
+| --- | --- |
+| `POST /login/` | `{ email, password }` → `{ token, user }` |
+| `POST /logout/` | Revokes the presented token |
+| `GET /me/` | The authenticated user (an `apiView` running the standard pipeline) |
+
+Unknown email, wrong password, and inactive account all return the same 400
+with comparable timing — login failures are indistinguishable and timing-safe
+against user enumeration.
+
+## Protecting routes
+
+`authTokenAuthentication()` fulfills the `Authentication` contract from
+`@tango-ts/auth`. Use it per viewset, or project-wide so `ctx.user` is set on
+every route and viewset without per-route wiring:
+
+<CodeGroup>
+
+```ts Project-wide
+import { authTokenAuthentication } from '@tango-ts/contrib-auth'
+
+export const project = defineProject({
+  name: 'shop',
+  database: mysqlFromEnv({ projectName: 'shop' }),
+  routes,
+  apps: [coreApp],
+  authentication: [authTokenAuthentication()]
+})
+```
+
+```ts Per viewset
+import { authTokenAuthentication } from '@tango-ts/contrib-auth'
+import { IsAuthenticated } from '@tango-ts/auth'
+
+modelViewSet({
+  model: Post,
+  serializer: PostSerializer,
+  authentication: [authTokenAuthentication()],
+  permissions: [IsAuthenticated]
+})
+```
+
+</CodeGroup>
+
+Clients authenticate with the issued token:
+
+```sh
+curl http://127.0.0.1:8000/core/posts/ \
+  -H 'Authorization: Bearer tango_...'
+```
+
+## Programmatic helpers
+
+For scripts, custom flows, and tests:
+
+```ts
+import {
+  authenticateUser,
+  createSuperuser,
+  createUser,
+  issueToken,
+  revokeToken,
+  verifyAuthToken
+} from '@tango-ts/contrib-auth'
+
+const user = await createUser({ email: 'a@b.c', password: 's3cret' })
+const authed = await authenticateUser('a@b.c', 's3cret') // timing-safe
+const { token } = await issueToken(user.id)
+```
+
+`createSuperuser` creates an `isStaff` + `isSuperuser` user — the CLI's
+`tango createsuperuser` wraps it.
+
+## What it does not do
+
+OAuth/social login and JWT issuance are layers on top, not part of this
+package. The authentication and permission *interfaces* live in
+[`@tango-ts/auth`](/auth/authentication).
+
+<Warning>
+  Secrets are hashed at rest: plaintext tokens and passwords are never stored,
+  and the password hash never appears on `ctx.user` or in a response.
+</Warning>

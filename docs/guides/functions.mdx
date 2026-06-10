@@ -1,0 +1,95 @@
+---
+title: "Internal Functions"
+description: "Typed internal serverless functions — never exposed as API routes."
+---
+
+Each app can declare typed units of work in its `functions/` folder. They are
+invoked from inside Tango logic — routes, viewsets, middleware, or other
+functions — and are **never** part of the public API surface.
+
+```ts
+import { defineFunction } from '@tango-ts/functions'
+
+export const sendWelcomeEmail = defineFunction({
+  name: 'sendWelcomeEmail',
+  handler: async (payload: { userId: number }) => {
+    // ... do the work ...
+    return { sent: true }
+  }
+})
+```
+
+Payload and result types are inferred from the handler, and both are
+constrained to `JsonValue` at the type level — passing a `Date`, `Map`, or
+function fails to compile.
+
+## Registering
+
+Functions are registered explicitly on the app — no filesystem discovery, so
+serverless bundles stay deterministic:
+
+```ts
+// src/apps/core/functions/index.ts
+import { createFunctionRegistry } from '@tango-ts/functions'
+
+import { sendWelcomeEmail } from './send-welcome-email.js'
+
+export const functions = createFunctionRegistry([sendWelcomeEmail])
+```
+
+```ts
+export const app = defineApp({ name: 'core', models, routes, functions, migrationsDir })
+```
+
+## Invoking
+
+```ts
+// Awaited, with a typed result:
+const result = await sendWelcomeEmail.invoke({ userId: user.id })
+
+// Fire-and-forget:
+sendWelcomeEmail.defer({ userId: user.id })
+```
+
+`defer` keeps work alive via Vercel's `waitUntil` when present. Runtimes expose
+`drain()`, and the project's `dispose()` awaits it during graceful shutdown, so
+deferred work completes before the process exits.
+
+<Note>
+  An `invoke` inside `atomic()` does **not** join the caller's transaction —
+  handlers run in a fresh connection scope, matching production semantics
+  where each invocation may be its own serverless function.
+</Note>
+
+## Transports
+
+How an invocation executes depends on the configured runtime:
+
+| Transport | Behavior | Default on |
+| --- | --- | --- |
+| `inline` | In-process execution | Local / everywhere else |
+| `http` | Signed `POST` back to this deployment, so each invocation gets its own timeout and memory budget | Vercel |
+
+The http transport signs every dispatch with HMAC (timestamp + app + name +
+raw body, a ±5 minute replay window, constant-time compare). The receiving
+endpoint lives under the reserved `/_tango/` prefix, answers a
+router-identical **404** to anything unsigned, and is never emitted by the
+OpenAPI generator — from the outside, it does not exist.
+
+## Configuration
+
+`functionRuntimeFromEnv` resolves the transport:
+
+| Variable | Meaning |
+| --- | --- |
+| `TANGO_FUNCTIONS_TRANSPORT` | `http` or `inline` (defaults to `http` on Vercel, `inline` elsewhere). |
+| `TANGO_FUNCTIONS_SECRET` | HMAC secret — required for the http transport; missing config fails at startup. |
+| `TANGO_FUNCTIONS_URL` | Dispatch base URL (defaults to `https://$VERCEL_URL`). |
+
+<Warning>
+  If Vercel Deployment Protection covers the deployment URL, the protection
+  layer 401s the self-invocation at the edge before it reaches the app. Enable
+  **Protection Bypass for Automation** in the Vercel project settings; when
+  `VERCEL_AUTOMATION_BYPASS_SECRET` is present, every dispatch automatically
+  carries `x-vercel-protection-bypass`.
+</Warning>

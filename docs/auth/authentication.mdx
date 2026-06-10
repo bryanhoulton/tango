@@ -1,0 +1,101 @@
+---
+title: "Authentication"
+description: "Stateless, DRF-style authentication classes."
+---
+
+`@tango-ts/auth` provides stateless DRF-style authentication primitives. It
+parses authorization headers and verifies tokens through functions you supply —
+it does not own sessions, user persistence, or database lookups. Those stay
+explicit and pluggable.
+
+<Note>
+  Want batteries included — a `User` model, password hashing, token issuance,
+  and login routes? Use [contrib-auth](/auth/contrib-auth). This page covers
+  the underlying primitives.
+</Note>
+
+## Authentication classes
+
+Two header-parsing classes ship out of the box:
+
+```ts
+import { BearerTokenAuthentication, TokenAuthentication } from '@tango-ts/auth'
+
+// Authorization: Bearer <token>
+const bearer = new BearerTokenAuthentication({
+  verify: async (token) => lookupUser(token) // you decide where users live
+})
+
+// Authorization: Token <token>  (DRF-style)
+const drfToken = new TokenAuthentication({ verify: verifyToken })
+```
+
+The verifier returns a user (attached to `ctx.user`) or throws
+`AuthenticationFailed` for invalid credentials.
+
+## Where authentication runs
+
+### Per viewset
+
+```ts
+modelViewSet({
+  model: Post,
+  serializer: PostSerializer,
+  authentication: [bearer],
+  permissions: [IsAuthenticated]
+})
+```
+
+The `authentication` classes also decide what `ctx.user` is typed as in action
+handlers, `queryset`, `objectPermission`, and permission predicates.
+
+### Project-wide
+
+Pass `authentication` to `defineProject` (DRF's default authentication
+classes). It runs for every request — viewsets *and* plain routes — and places
+the resolved user on `ctx.user`:
+
+```ts
+export const project = defineProject({
+  name: 'shop',
+  database: mysqlFromEnv({ projectName: 'shop' }),
+  routes,
+  apps: [coreApp],
+  authentication: [authTokenAuthentication()]
+})
+```
+
+Invalid credentials short-circuit with a **401**; absent credentials proceed
+unauthenticated. Viewsets and `apiView` routes may declare their own
+`authentication` to override the project default.
+
+### Plain routes with `apiView`
+
+`apiView` is DRF's `@api_view` for plain routes: it wraps a handler so it runs
+the same authentication + permission pipeline as a viewset, with `ctx.user`
+populated (falling back to a user set by project-level authentication):
+
+```ts
+import { apiView, IsAuthenticated } from '@tango-ts/auth'
+
+route(
+  'GET',
+  '/me/',
+  apiView(
+    { authentication: [bearer], permissions: [IsAuthenticated] },
+    async (ctx) => jsonResponse({ user: ctx.user })
+  )
+)
+```
+
+## One shared pipeline
+
+`ModelViewSet`, `apiView`, and project-level authentication all dispatch
+through the same functions — `runAuthentication`, `checkPermissions`, and
+`checkObjectPermissions` — so 401/403 semantics cannot drift between entry
+points:
+
+- Missing or invalid credentials → **401**
+- Permission denial → **403**
+
+Both use DRF-style `{ detail }` envelopes.

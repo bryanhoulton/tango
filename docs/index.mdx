@@ -1,0 +1,100 @@
+---
+title: "Introduction"
+description: "Django REST Framework, rebuilt in TypeScript, for serverless APIs."
+---
+
+Tango exists for developers who want the Django + DRF way of building APIs:
+declare a model, derive validation and serialization from that model, register a
+viewset, and get typed CRUD endpoints without rewriting the same shape in five
+places.
+
+The core is TypeScript-first, MySQL/PlanetScale-oriented, and built around
+Web-standard `Request` / `Response` handlers, so the same app runs locally, in a
+container, or serverless on Vercel without changes.
+
+```ts
+import { f, model } from '@tango-ts/orm'
+import { modelSerializer } from '@tango-ts/serializers'
+import { defineRoutes, route } from '@tango-ts/router'
+import { modelViewSet } from '@tango-ts/views'
+
+export const Post = model('posts', {
+  id: f.int().primaryKey().autoIncrement(),
+  title: f.varchar(255),
+  body: f.text(),
+  published: f.boolean().default(false)
+})
+
+export const PostSerializer = modelSerializer(Post, {
+  fields: ['id', 'title', 'body', 'published'] as const,
+  readOnlyFields: ['id'] as const
+})
+
+export const routes = defineRoutes([
+  route('/posts', modelViewSet({ model: Post, serializer: PostSerializer }))
+])
+```
+
+That is a complete, typed CRUD resource: list, retrieve, create, partial
+update, and delete — with validation, DRF-shaped error envelopes, migrations,
+and an OpenAPI 3.1 document all derived from the same model definition.
+
+## Why Tango
+
+<CardGroup cols={2}>
+  <Card title="One source of truth" icon="database">
+    Query shapes, insert shapes, filters, serializers, migrations, and OpenAPI
+    metadata all derive from the model. No hand-written DTOs, ever.
+  </Card>
+  <Card title="Serverless-first" icon="bolt">
+    Every app is a Web-standard handler. Database connections are
+    request-scoped, migrations run at deploy time, and there is no module-level
+    mutable state.
+  </Card>
+  <Card title="DRF semantics" icon="check-double">
+    Serializers, viewsets, authentication classes, permissions, and error
+    envelopes follow Django REST Framework — and parity is tested against real
+    DRF and Django in CI.
+  </Card>
+  <Card title="Strictly typed" icon="shield-check">
+    Invalid filters, wrong value types, and unknown relations fail to compile.
+    The framework contains no `any`.
+  </Card>
+</CardGroup>
+
+## The pieces
+
+| Concept | What it does |
+| --- | --- |
+| **Project** | The root Web handler. Wires database access, root routes, and nested apps together. |
+| **App** | A focused domain module with models, serializers, routes, functions, and migrations. |
+| **Model** | The single source of truth for persistence and types. |
+| **Serializer** | The DRF-style boundary for validation and output. |
+| **Viewset** | Common CRUD behavior for a model resource — a model plus serializer is enough. |
+| **Router** | Explicit route registration over Web-standard requests. No filesystem routing. |
+| **Functions** | Internal serverless functions, invoked from inside Tango logic — never exposed as API routes. |
+| **Migrations** | Generated from model snapshots, applied at deploy time — never during request handling. |
+
+## Status
+
+Tango is still early. The ORM, migrations, serializers, router, viewsets, auth
+primitives, the admin, internal functions, OpenAPI generation, middleware, Node
+and Vercel adapters, and CLI scaffolding exist today. Caching and more
+deployment adapters (Lambda, Cloudflare Workers) are part of the direction, not
+the current surface.
+
+<Note>
+  Tango is the product name. The npm packages live under the `@tango-ts/*`
+  scope.
+</Note>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Scaffold a project and ship your first resource in minutes.
+  </Card>
+  <Card title="Project structure" icon="folder-tree" href="/project-structure">
+    How projects, apps, and routes fit together.
+  </Card>
+</CardGroup>

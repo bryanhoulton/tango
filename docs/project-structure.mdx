@@ -1,0 +1,123 @@
+---
+title: "Project Structure"
+description: "How projects, apps, routes, and functions fit together."
+---
+
+Tango has two organizational units, borrowed directly from Django: the
+**project** (the deployable root) and **apps** (focused domain modules inside
+it).
+
+## Projects
+
+`defineProject` creates a named Web handler for the root of your API. It wires
+together the database connection, root-level routes, a list of apps, and
+optional middleware and project-level authentication:
+
+```ts
+import { defineProject, mysqlFromEnv } from '@tango-ts/server'
+
+import { app as coreApp } from './apps/core/app.js'
+import { routes } from './routes.js'
+
+export const project = defineProject({
+  name: 'shop',
+  database: mysqlFromEnv({ projectName: 'shop' }),
+  routes,
+  apps: [coreApp]
+})
+
+export default project
+```
+
+The returned handler is a Web-standard `(request: Request) => Promise<Response>`
+function with extras:
+
+- Every request runs inside a request-scoped database connection — the ORM
+  never holds a module-level connection.
+- Middleware run outermost-first, inside the request's database scope.
+- Each app's internal functions are registered, and (under the http transport)
+  the signed dispatch route is mounted.
+- The handler exposes `dispose()`, which drains deferred function work and
+  releases the database pool at process shutdown.
+
+## Apps
+
+An app is one object: models, mounted routes, internal functions, and a
+migrations directory.
+
+```ts
+import { defineApp } from '@tango-ts/server'
+
+import { functions } from './functions/index.js'
+import { models } from './models.js'
+import { routes } from './routes.js'
+
+export const app = defineApp({
+  name: 'core',
+  models,
+  routes,
+  functions,
+  migrationsDir: new URL('./migrations', import.meta.url).pathname
+})
+```
+
+- Apps mount at `/<name>` by default; override with `path`.
+- Each app owns its own migration directory.
+- The same app object satisfies the CLI's `TangoApp` contract, so
+  `tango makemigrations` and `tango migrate` consume the module directly —
+  there is no filesystem model scanning.
+
+### Adding another app
+
+Apps keep domains separate without creating another service. From inside a
+Tango project:
+
+```sh
+yarn tango startapp billing --directory src/apps/billing
+```
+
+Then import the new app in `src/project.ts` and add it to `apps`:
+
+```ts
+import { app as billingApp } from './apps/billing/app.js'
+
+export const project = defineProject({
+  name: 'shop',
+  database: mysqlFromEnv({ projectName: 'shop' }),
+  routes,
+  apps: [coreApp, billingApp]
+})
+```
+
+<Note>
+  Each app owns its own migration directory. Generated scripts target the
+  starter `core` app; additional apps should get their own migration scripts or
+  CI steps.
+</Note>
+
+## The generated layout
+
+```txt
+shop/
+  package.json
+  tsconfig.json
+  vercel.json          # single-function rewrite for Vercel
+  api/index.ts         # Vercel entrypoint (wraps src/project.ts)
+  Dockerfile           # container deployment
+  .env.example
+  src/
+    project.ts         # defineProject – the root Web handler
+    routes.ts          # root-level routes (health checks, etc.)
+    apps/
+      core/
+        app.ts         # defineApp – the app declaration
+        models.ts      # model() definitions
+        serializers.ts # modelSerializer() definitions
+        routes.ts      # defineRoutes([route(...)])
+        functions/     # internal serverless functions
+        migrations/    # generated migration files
+```
+
+The important constraint: Tango apps are Web handlers and migrations are
+deploy-time commands. Request handling stays stateless and never runs schema
+changes.

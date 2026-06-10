@@ -1,0 +1,66 @@
+---
+title: "Middleware"
+description: "Web-standard middleware with production built-ins."
+---
+
+Middleware are configured declaratively on the project and run outermost-first,
+inside the request's database scope:
+
+```ts
+import {
+  cors,
+  defineProject,
+  requestLog,
+  securityHeaders
+} from '@tango-ts/server'
+
+export const project = defineProject({
+  name: 'shop',
+  database: mysqlFromEnv({ projectName: 'shop' }),
+  routes,
+  apps: [coreApp],
+  middleware: [
+    requestLog(),
+    securityHeaders(),
+    cors({ origins: ['https://app.example.com'] })
+  ]
+})
+```
+
+`@tango-ts/server` re-exports the middleware built-ins from `@tango-ts/http`,
+so projects configure everything from one import.
+
+## Built-ins
+
+| Middleware | What it does |
+| --- | --- |
+| `requestLog(...)` | Structured request logs with `x-request-id`. |
+| `securityHeaders(...)` | Standard security response headers. |
+| `cors(...)` | CORS headers, including `OPTIONS` preflight handling. |
+| `bodyLimit({ maxBytes })` | Rejects oversized request bodies. |
+
+## Writing your own
+
+A middleware wraps a Web handler and returns a Web handler — no Express-style
+mutation:
+
+```ts
+import type { Middleware } from '@tango-ts/http'
+
+const timing: Middleware = (next) => async (request) => {
+  const start = Date.now()
+  const response = await next(request)
+  response.headers.set('server-timing', `app;dur=${Date.now() - start}`)
+  return response
+}
+```
+
+`applyMiddleware(handler, middleware)` composes a list outermost-first —
+`defineProject` calls it for you.
+
+## Logging
+
+The `Logger` contract and `consoleLogger()` (JSON lines) live in
+`@tango-ts/http`. The Node adapter reports unexpected handler errors to the
+configured logger and returns a JSON 500 envelope, so failures are never
+silent.

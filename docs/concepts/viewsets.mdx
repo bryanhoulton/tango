@@ -1,0 +1,198 @@
+---
+title: "Viewsets"
+description: "A model plus a serializer is enough for typed CRUD routes."
+---
+
+`modelViewSet` is Tango's `ModelViewSet`: it maps collection and detail routes
+to ORM and serializer operations.
+
+```ts
+import { defineRoutes, route } from '@tango-ts/router'
+import { modelViewSet } from '@tango-ts/views'
+
+export const routes = defineRoutes([
+  route('/posts', modelViewSet({ model: Post, serializer: PostSerializer }))
+])
+```
+
+That registers:
+
+| Method & path | Action |
+| --- | --- |
+| `GET /posts/` | List |
+| `POST /posts/` | Create |
+| `GET /posts/:id/` | Retrieve |
+| `PATCH /posts/:id/` | Partial update |
+| `DELETE /posts/:id/` | Destroy |
+
+Behavior matches DRF:
+
+- Serializer validation errors return **400** with a DRF-shaped error map.
+- Malformed JSON returns `{ "detail": "Malformed JSON." }` with **400**.
+- Missing objects return `{ "detail": "Not found." }` with **404**.
+- PATCH uses partial serializer validation, so omitted fields are not erased.
+- Create and update responses re-fetch the row, so auto-managed fields and
+  nested relations are present in the response.
+
+## Filters
+
+Allow query-param filters for the list endpoint by declaring the lookups —
+they are ANDed together via the ORM:
+
+```ts
+modelViewSet({
+  model: Post,
+  serializer: PostSerializer,
+  filters: ['published', 'title__icontains', 'authorId'] as const
+})
+```
+
+```sh
+curl 'http://127.0.0.1:8000/core/posts/?published=true&title__icontains=tango'
+```
+
+Filter names are typechecked against the model's `Lookups` type, and values are
+coerced to the field's type.
+
+## Pagination
+
+Opt in to a page/pageSize pagination envelope:
+
+```ts
+modelViewSet({
+  model: Post,
+  serializer: PostSerializer,
+  pagination: { pageSize: 20, maxPageSize: 100 }
+})
+```
+
+```json
+{
+  "count": 132,
+  "next": "https://api.example.com/core/posts/?page=3",
+  "previous": "https://api.example.com/core/posts/?page=1",
+  "results": [ ... ]
+}
+```
+
+Pagination executes in SQL (`COUNT(*)` plus an ordered `LIMIT`/`OFFSET`) — the
+table is never loaded into memory. Clients may pass `?page=` and `?pageSize=`
+(capped at `maxPageSize`).
+
+## Ordering
+
+```ts
+modelViewSet({
+  model: Post,
+  serializer: PostSerializer,
+  ordering: ['-createdAt'] as const
+})
+```
+
+Paginated lists always have a deterministic order: the configured `ordering`,
+or the primary key.
+
+## Queryset scoping
+
+`queryset` is Django's `get_queryset()`: scope every action to a per-request
+QuerySet. `list` queries the scope, and detail actions **404** for rows outside
+it — out-of-scope rows simply do not exist for the caller.
+
+```ts
+modelViewSet({
+  model: Post,
+  serializer: PostSerializer,
+  authentication: [authTokenAuthentication()],
+  queryset: (ctx) => Post.objects.filter({ authorId: ctx.user!.id })
+})
+```
+
+Request filters compose on top of the scope and can never widen it.
+
+## Authentication & permissions
+
+Viewsets run authentication and permission hooks before any view logic:
+
+```ts
+import { IsAuthenticated } from '@tango-ts/auth'
+
+modelViewSet({
+  model: Post,
+  serializer: PostSerializer,
+  authentication: [authTokenAuthentication()],
+  permissions: [IsAuthenticated]
+})
+```
+
+Missing/invalid credentials produce **401**; permission denial produces
+**403** — see [Authentication](/auth/authentication) and
+[Permissions](/auth/permissions).
+
+### Object-level permissions
+
+For detail actions, object-level permissions are checked after the row is
+fetched and before any write. Use permission classes implementing
+`hasObjectPermission`, or the shorthand:
+
+```ts
+modelViewSet({
+  model: Post,
+  serializer: PostSerializer,
+  objectPermission: (ctx, row) => row.authorId === ctx.user?.id
+})
+```
+
+Denial is a **403**.
+
+## Custom actions
+
+Custom collection and detail actions are DRF's `@action`, declared explicitly:
+
+```ts
+modelViewSet({
+  model: User,
+  serializer: UserSerializer,
+  actions: [
+    {
+      name: 'export',
+      method: 'GET',
+      path: 'export', // collection: GET /users/export/
+      detail: false,
+      handler: async (ctx) => jsonResponse(await buildExport())
+    },
+    {
+      name: 'activate',
+      method: 'POST',
+      path: 'activate', // detail: POST /users/:id/activate/
+      detail: true,
+      handler: async (ctx, row) => {
+        await User.objects.update({ id: row.id }, { isActive: true })
+        return jsonResponse({ ok: true })
+      }
+    }
+  ]
+})
+```
+
+Things to know:
+
+- An action's `path` is just the action name (e.g. `'activate'`), never a path
+  pattern — the viewset prepends `/:id/` for detail actions itself. A path
+  containing `:` params throws at route build time.
+- Detail handlers receive `(ctx, row)` — the row is resolved DRF-style through
+  the scoped queryset (out-of-scope or missing rows 404) and past the
+  object-permission pass before the handler runs. Scoping and object
+  permissions cannot be skipped.
+- Per-action `authentication` and `permissions` replace the viewset-level
+  classes for that action (DRF's `@action(permission_classes=...)`).
+- Collection action routes register before the `/:id/` routes, so
+  `GET /users/export/` is never captured as a retrieve with id `"export"`.
+- Each action can declare an `openApi` override for the generated document.
+
+## Nested responses
+
+When the serializer declares `nested: { ... }`, list, retrieve, create, and
+PATCH responses carry the nested relations. The viewset `selectRelated`s every
+nested relation path (including deeper nesting like `author__organization`)
+and re-fetches the row after writes, so create/update responses include nested
+data. Nested metadata also flows into the [OpenAPI](/guides/openapi) document.

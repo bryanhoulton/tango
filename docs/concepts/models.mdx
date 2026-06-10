@@ -1,0 +1,172 @@
+---
+title: "Models & Fields"
+description: "Declare a model once; derive every other shape from it."
+---
+
+A model is the single source of truth for persistence and types. Query shapes,
+insert shapes, filters, serializers, migrations, and OpenAPI metadata all
+derive from the model — Tango never asks you to hand-write a row interface or
+DTO.
+
+```ts
+import { f, model } from '@tango-ts/orm'
+
+export const Post = model('posts', {
+  id: f.int().primaryKey().autoIncrement(),
+  title: f.varchar(255),
+  body: f.text(),
+  published: f.boolean().default(false)
+})
+```
+
+The first argument is the table name. The second is a map of field builders.
+
+## Field builders
+
+All builders live on `f`:
+
+| Builder | MySQL type |
+| --- | --- |
+| `f.int()` | `INT` |
+| `f.float()` | floating point |
+| `f.varchar(n)` | `VARCHAR(n)` |
+| `f.text()` | `TEXT` |
+| `f.boolean()` | boolean |
+| `f.datetime()` | `DATETIME` |
+| `f.date()` | `DATE` |
+| `f.foreignKey(() => Target, 'id')` | FK column + relation |
+
+## Field modifiers
+
+Builders chain modifiers, Django-style:
+
+```ts
+f.varchar(255).unique()
+f.int().nullable()
+f.datetime().autoNowAdd()   // set on insert
+f.datetime().autoNow()      // set on every update
+f.boolean().default(false)
+f.int().primaryKey().autoIncrement()
+```
+
+| Modifier | Effect |
+| --- | --- |
+| `.nullable()` | Column allows `NULL`; the TypeScript type includes `null` and the field becomes optional on insert. |
+| `.primaryKey()` | Marks the primary key. |
+| `.autoIncrement()` | `AUTO_INCREMENT`; the field is read-only in practice. |
+| `.unique()` | Unique constraint. |
+| `.default(value)` | Database default; the field becomes optional on insert. |
+| `.autoNowAdd()` / `.autoNow()` | Auto-managed timestamps (Django's `auto_now_add` / `auto_now`). |
+| `.choices([...])` | Restrict values to a literal set (see below). |
+
+### Choices
+
+`.choices()` is Django's `choices`: pure metadata with no DDL change that
+narrows the field's TypeScript type to the literal union.
+
+```ts
+const Article = model('articles', {
+  id: f.int().primaryKey().autoIncrement(),
+  status: f.varchar(20).choices(['draft', 'published'])
+})
+// status types as 'draft' | 'published'
+```
+
+Choices flow through the whole stack:
+
+- The TypeScript type is the literal union.
+- Serializers reject out-of-set values at runtime.
+- The OpenAPI document emits an `enum`.
+- The admin renders a select, both as a list filter and as a form input.
+
+## Foreign keys
+
+Declare a reference with `f.foreignKey`:
+
+```ts
+const User = model('users', {
+  id: f.int().primaryKey().autoIncrement(),
+  email: f.varchar(255).unique(),
+  name: f.varchar(255)
+})
+
+const Post = model('posts', {
+  id: f.int().primaryKey().autoIncrement(),
+  authorId: f.foreignKey(() => User, 'id'),
+  title: f.varchar(255)
+})
+```
+
+The target is a lazy thunk (`() => User`) so models can reference each other
+without import-order problems.
+
+By convention, an FK field named `authorId` exposes a relation named `author`.
+That relation powers filter traversal (`author__email__icontains`) and eager
+loading (`selectRelated('author')`) — see [Querying](/concepts/querying).
+
+### `dbConstraint: false`
+
+PlanetScale (Vitess) rejects `FOREIGN KEY` constraints. Declare the reference
+with `dbConstraint: false` (Django's `db_constraint=False`) to keep joins and
+typing while skipping the constraint DDL:
+
+```ts
+authorId: f.foreignKey(() => User, 'id', { dbConstraint: false })
+```
+
+## Reverse relations
+
+Forward FK traversal works by convention. Reverse relations are declared
+explicitly with `r.hasMany` in the model's options:
+
+```ts
+import { f, model, r } from '@tango-ts/orm'
+
+const Organization = model(
+  'organizations',
+  {
+    id: f.int().primaryKey().autoIncrement(),
+    name: f.varchar(255)
+  },
+  {
+    relations: {
+      authors: r.hasMany(() => Author, 'organizationId')
+    }
+  }
+)
+
+// Filter through the reverse relation:
+Organization.objects.filter({ authors__name__icontains: 'ada' })
+```
+
+## Inferred types
+
+Tango derives every downstream shape from the field map (the types live in
+`@tango-ts/core-types` if you ever want to name them):
+
+| Type | Shape |
+| --- | --- |
+| `InferSelect<F>` | The row read from the DB — nullable fields include `null`. |
+| `InferInsert<F>` | The create shape — nullable / defaulted fields are optional. |
+| `InferUpdate<F>` | Partial update shape. |
+| `Lookups<F>` | The fully-checked filter object — per-field lookups are gated by the field's value type. |
+
+You rarely name these types directly; `Model.objects.create(...)`,
+`.filter(...)`, and serializer inputs/outputs carry them automatically. Invalid
+lookups, wrong value types, and unknown relations fail to compile.
+
+## Registering models
+
+Export your models as a list and hand them to the app — there is no filesystem
+scanning:
+
+```ts
+export const models = [User, Post] as const
+```
+
+```ts
+export const app = defineApp({ name: 'core', models, routes, migrationsDir })
+```
+
+The same list drives [migrations](/concepts/migrations) and the
+[admin](/guides/admin).
