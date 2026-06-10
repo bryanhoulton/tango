@@ -1,5 +1,15 @@
 # @tango-ts/cli
 
+## 0.6.0
+
+### Patch Changes
+
+- Updated dependencies [2bf9fef]
+  - @tango-ts/orm@0.6.0
+  - @tango-ts/adapters@0.6.0
+  - @tango-ts/contrib-auth@0.6.0
+  - @tango-ts/migrations@0.6.0
+
 ## 0.5.0
 
 ### Minor Changes

@@ -1,6 +1,6 @@
 {
   "name": "@tango-ts/auth",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Stateless DRF-style authentication and permissions for Tango.",
   "license": "MIT",
   "type": "module",

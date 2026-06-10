@@ -1,5 +1,21 @@
 # @tango-ts/views
 
+## 0.6.0
+
+### Minor Changes
+
+- 2bf9fef: Add `.choices([...])` field modifier (Django's `choices`): pure metadata with no DDL change. The field's TypeScript type narrows to the literal union, serializers reject values outside the set, OpenAPI emits an `enum`, and the admin renders choice fields as selects in both list filters and forms.
+
+### Patch Changes
+
+- Updated dependencies [2bf9fef]
+  - @tango-ts/orm@0.6.0
+  - @tango-ts/serializers@0.6.0
+  - @tango-ts/auth@0.6.0
+  - @tango-ts/core-types@0.6.0
+  - @tango-ts/http@0.6.0
+  - @tango-ts/router@0.6.0
+
 ## 0.5.0
 
 ### Minor Changes

@@ -1,6 +1,6 @@
 {
   "name": "@tango-ts/core-types",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Pure type layer for Tango: field definitions and ORM type inference. Zero runtime.",
   "license": "MIT",
   "type": "module",
