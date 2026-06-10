@@ -1,5 +1,13 @@
 # @tango-ts/migrations
 
+## 0.6.0
+
+### Patch Changes
+
+- Updated dependencies [2bf9fef]
+  - @tango-ts/orm@0.6.0
+  - @tango-ts/core-types@0.6.0
+
 ## 0.5.0
 
 ### Patch Changes

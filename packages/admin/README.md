@@ -57,7 +57,11 @@ any other Tango viewset.
 ## The meta document
 
 `GET /meta/` returns everything the generic UI needs: each model's fields
-(type, nullable, read-only, required, max length), foreign keys resolved to
-their admin endpoints with a display field for pickers, list configuration,
-and pagination. The UI is identical for every project; all per-project shape
-lives in this document.
+(type, nullable, read-only, required, max length, choices), foreign keys
+resolved to their admin endpoints with a display field for pickers, list
+configuration, and pagination. The UI is identical for every project; all
+per-project shape lives in this document.
+
+Fields declared with `.choices([...])` carry their allowed values into the
+meta document — the UI renders them as selects, both as list filters and as
+form inputs.

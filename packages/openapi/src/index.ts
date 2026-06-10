@@ -107,7 +107,12 @@ function fieldSchema(field: Field, readOnly: boolean): SchemaObject {
                     ? {}
                     : { maxLength: field.spec.maxLength })
                 }
-  return readOnly ? { ...base, readOnly: true } : base
+  // Choices become a JSON Schema enum; nullable choice fields include null.
+  const withChoices: SchemaObject =
+    field.spec.choices === undefined
+      ? base
+      : { ...base, enum: nullable ? [...field.spec.choices, null] : field.spec.choices }
+  return readOnly ? { ...withChoices, readOnly: true } : withChoices
 }
 
 function isRequired(field: Field): boolean {

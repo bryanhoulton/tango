@@ -32,6 +32,7 @@ export interface OpenApiSchemaObject {
   readonly type?: string | readonly string[]
   readonly format?: string
   readonly maxLength?: number
+  readonly enum?: readonly (string | number | null)[]
   readonly readOnly?: boolean
   readonly properties?: Record<string, OpenApiSchemaObject>
   readonly required?: string[]

@@ -69,6 +69,38 @@ describe('generateOpenApi', () => {
     })
   })
 
+  it('emits enum for choice fields, including null for nullable ones', () => {
+    const Article = model('articles', {
+      id: f.int().primaryKey().autoIncrement(),
+      status: f.varchar(20).choices(['draft', 'published']).default('draft'),
+      priority: f.int().choices([1, 2, 3]).nullable()
+    })
+    const ArticleSerializer = modelSerializer(Article, {
+      fields: ['id', 'status', 'priority'] as const,
+      readOnlyFields: ['id'] as const
+    })
+    const router = createRouter()
+    router.register(
+      '/articles',
+      modelViewSet({ model: Article, serializer: ArticleSerializer })
+    )
+
+    const schema = generateOpenApi(router, { title: 'Tango API', version: '1.0.0' })
+
+    expect(schema.components.schemas['Article']).toEqual({
+      type: 'object',
+      properties: {
+        id: { type: 'integer', readOnly: true },
+        status: {
+          type: 'string',
+          maxLength: 20,
+          enum: ['draft', 'published']
+        },
+        priority: { type: ['integer', 'null'], enum: [1, 2, 3, null] }
+      }
+    })
+  })
+
   it('merges view-specific OpenAPI overrides and documents custom actions', () => {
     const router = createRouter()
     router.register(

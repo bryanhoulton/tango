@@ -19,7 +19,12 @@ the lazy QuerySet, Django-style lookups, and the request-scoped connection. Does
 
 - `f.*` — field builders (`int`, `float`, `varchar`, `text`, `boolean`, `datetime`,
   `date`, `foreignKey`) with `.nullable()`, `.primaryKey()`, `.autoIncrement()`,
-  `.unique()`, `.default()`, `.autoNow()/.autoNowAdd()`. `f.foreignKey` accepts
+  `.unique()`, `.default()`, `.autoNow()/.autoNowAdd()`, `.choices([...])`.
+  `.choices()` is Django's `choices`: pure metadata (no DDL change) that narrows
+  the field's TypeScript type to the literal union (`f.varchar(20).choices(['draft',
+  'published'])` types as `'draft' | 'published'`), makes serializers reject
+  out-of-set values, emits an OpenAPI `enum`, and renders selects in the admin.
+  `f.foreignKey` accepts
   `{ dbConstraint: false }` (Django's `db_constraint=False`) to keep the
   reference for joins/typing while skipping FOREIGN KEY DDL — required on
   PlanetScale (Vitess), which rejects FK constraints.

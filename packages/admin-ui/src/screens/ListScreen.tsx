@@ -1,5 +1,5 @@
 import { Inbox, Plus, Search } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Badge,
   Button,
@@ -18,16 +18,34 @@ import {
 import { formatValue, stringify } from '@/lib/format'
 import { navigate } from '@/lib/router'
 
-function isBooleanFilter(model: AdminModelMeta, filter: string): boolean {
-  return model.fields.some(
-    (field) => field.name === filter && field.type === 'boolean'
-  )
-}
-
 const BOOLEAN_FILTER_ITEMS = [
   { id: 'true', name: 'Yes' },
   { id: 'false', name: 'No' }
 ]
+
+/**
+ * Select items for a filter, when it maps to a field with a discrete value
+ * set: booleans and choice fields. Everything else gets a free-text input.
+ */
+function filterSelectItems(
+  model: AdminModelMeta,
+  filter: string
+): { id: string; name: string }[] | undefined {
+  const field = model.fields.find((candidate) => candidate.name === filter)
+  if (field === undefined) {
+    return undefined
+  }
+  if (field.type === 'boolean') {
+    return BOOLEAN_FILTER_ITEMS
+  }
+  if (field.choices !== undefined) {
+    return field.choices.map((choice) => ({
+      id: String(choice),
+      name: String(choice)
+    }))
+  }
+  return undefined
+}
 
 export function ListScreen({
   model,
@@ -45,7 +63,18 @@ export function ListScreen({
 
   const searchField = model.searchFields[0]
 
-  const load = useCallback(async () => {
+  // Changing model resets list state and drops the previous model's rows so
+  // the table shows its loading state instead of flashing stale data. This
+  // effect is declared before the fetch effect so the reset wins the render.
+  useEffect(() => {
+    setPage(1)
+    setSearch('')
+    setFilters({})
+    setData(undefined)
+    setError(undefined)
+  }, [model.name])
+
+  useEffect(() => {
     const params = new URLSearchParams({ page: String(page) })
     if (search.length > 0 && searchField !== undefined) {
       params.set(`${searchField}__icontains`, search)
@@ -55,24 +84,28 @@ export function ListScreen({
         params.set(key, value)
       }
     }
-    try {
-      setData(await request<PaginatedList<Row>>(`${model.apiPath}?${params}`))
-      setError(undefined)
-    } catch {
-      setError('Failed to load rows.')
+    // Out-of-order guard: a slow response for a previous model/page must not
+    // overwrite the current one.
+    let cancelled = false
+    void (async () => {
+      try {
+        const result = await request<PaginatedList<Row>>(
+          `${model.apiPath}?${params}`
+        )
+        if (!cancelled) {
+          setData(result)
+          setError(undefined)
+        }
+      } catch {
+        if (!cancelled) {
+          setError('Failed to load rows.')
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
     }
   }, [model.apiPath, page, search, searchField, filters, refreshToken])
-
-  useEffect(() => {
-    void load()
-  }, [load])
-
-  // Changing model resets list state.
-  useEffect(() => {
-    setPage(1)
-    setSearch('')
-    setFilters({})
-  }, [model.name])
 
   const fieldByName = new Map(model.fields.map((field) => [field.name, field]))
   const columns = model.listDisplay.slice(0, 8).map((column) => ({
@@ -122,15 +155,20 @@ export function ListScreen({
             }}
           />
         )}
-        {model.filters.map((filter) =>
-          isBooleanFilter(model, filter) ? (
+        {model.filters.map((filter) => {
+          const items = filterSelectItems(model, filter)
+          return items !== undefined ? (
             <Select
               key={filter}
               className="w-44"
               placeholder={filter}
-              items={BOOLEAN_FILTER_ITEMS}
+              items={items}
               clearable
-              value={filters[filter] ?? null}
+              value={
+                filters[filter] !== undefined && filters[filter].length > 0
+                  ? filters[filter]
+                  : null
+              }
               onChange={(value) => {
                 setFilters((prev) => ({ ...prev, [filter]: value ?? '' }))
                 setPage(1)
@@ -148,7 +186,7 @@ export function ListScreen({
               }}
             />
           )
-        )}
+        })}
       </div>
 
       {error !== undefined && (

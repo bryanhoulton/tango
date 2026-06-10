@@ -58,6 +58,12 @@ export interface FieldSpec {
   readonly autoNow?: boolean
   readonly autoNowAdd?: boolean
   readonly references?: ReferenceSpec
+  /**
+   * Allowed values for this column (Django's `choices`). Pure metadata: the
+   * column DDL is unchanged — serializers validate against it, OpenAPI emits
+   * an `enum`, and the admin renders selects.
+   */
+  readonly choices?: readonly (string | number)[]
 }
 
 const BASE: Omit<FieldSpec, 'columnType'> = {
@@ -125,6 +131,23 @@ export class Field<
   /** Set on every save (`auto_now`). Marks the field optional on insert. */
   autoNow(): Field<TsType, Nullable, true, RelatedFields> {
     return this.patch<Nullable, true>({ hasDefault: true, autoNow: true })
+  }
+
+  /**
+   * Restrict the column to a fixed set of values (Django's `choices`). Pure
+   * metadata — the column type is unchanged — but the field's TypeScript type
+   * narrows to the literal union, serializers reject values outside the set,
+   * OpenAPI emits an `enum`, and the admin renders a select.
+   *
+   *   status: f.varchar(20).choices(['draft', 'published']).default('draft')
+   */
+  choices<const C extends readonly (TsType & (string | number))[]>(
+    values: C
+  ): Field<C[number], Nullable, HasDefault, RelatedFields> {
+    return new Field<C[number], Nullable, HasDefault, RelatedFields>({
+      ...this.spec,
+      choices: values
+    })
   }
 }
 

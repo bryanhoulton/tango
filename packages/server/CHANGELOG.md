@@ -1,5 +1,16 @@
 # @tango-ts/server
 
+## 0.6.0
+
+### Patch Changes
+
+- Updated dependencies [2bf9fef]
+  - @tango-ts/orm@0.6.0
+  - @tango-ts/adapters@0.6.0
+  - @tango-ts/auth@0.6.0
+  - @tango-ts/http@0.6.0
+  - @tango-ts/router@0.6.0
+
 ## 0.5.0
 
 ### Minor Changes
