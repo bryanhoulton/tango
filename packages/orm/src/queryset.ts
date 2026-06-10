@@ -234,24 +234,6 @@ function dedupeJoins(joins: readonly JoinSpec[]): JoinSpec[] {
   return out
 }
 
-function ensureNested(
-  root: Record<string, unknown>,
-  path: readonly string[]
-): Record<string, unknown> {
-  let current = root
-  for (const segment of path) {
-    const existing = current[segment]
-    if (existing !== null && typeof existing === 'object' && !Array.isArray(existing)) {
-      current = existing as Record<string, unknown>
-    } else {
-      const next: Record<string, unknown> = {}
-      current[segment] = next
-      current = next
-    }
-  }
-  return current
-}
-
 /**
  * A lazy, immutable description of a query. Nothing touches the database until the
  * QuerySet is awaited (it is a thenable), `.fetch()`-ed, or `.get()`-ed. Chaining
@@ -464,13 +446,27 @@ export class QuerySet<Row, Lk, Selectable extends string = never>
 
   private inflateSelectedRelations(row: Record<string, unknown>): Record<string, unknown> {
     const copy: Record<string, unknown> = { ...row }
+    // Joins arrive parent-first (resolveRelationChain builds chains in order),
+    // so a relation's container is always inflated before its children.
+    const inflated = new Map<string, Record<string, unknown> | null>()
     for (const join of this.selectedRelationJoins()) {
-      const nested = ensureNested(copy, join.alias.split('__'))
+      const related: Record<string, unknown> = {}
       for (const column of Object.keys(join.relation.target().fields ?? {})) {
         const key = `${join.alias}__${column}`
-        nested[column] = copy[key]
+        related[column] = copy[key]
         delete copy[key]
       }
+      const parent = join.parent === '' ? copy : inflated.get(join.parent)
+      if (parent === null || parent === undefined) {
+        // The parent relation is itself null; deeper relations cannot exist.
+        inflated.set(join.alias, null)
+        continue
+      }
+      // A null FK means the LEFT JOIN matched nothing: the relation is null,
+      // not an object whose columns are all null.
+      const value = parent[join.relation.localColumn] === null ? null : related
+      parent[join.relation.name] = value
+      inflated.set(join.alias, value)
     }
     return copy
   }

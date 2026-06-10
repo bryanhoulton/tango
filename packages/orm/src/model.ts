@@ -28,9 +28,17 @@ export interface RelationSpec {
   readonly targetColumn: string
 }
 
-function relationNameFor(column: string, configured?: string): string {
+/**
+ * The logical relation name a FK column exposes (the runtime twin of
+ * `RelationName` in `@tango-ts/core-types`): the column with its FK suffix
+ * stripped — `authorId` -> `author`, `author_id` -> `author`.
+ */
+export function relationNameFor(column: string, configured?: string): string {
   if (configured !== undefined) {
     return configured
+  }
+  if (column.endsWith('_id')) {
+    return column.slice(0, -3)
   }
   return column.endsWith('Id') ? column.slice(0, -2) : column
 }

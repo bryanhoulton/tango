@@ -150,6 +150,29 @@ describe('QuerySet SQL compilation', () => {
     expect(parameters).toEqual([])
   })
 
+  it('strips snake_case _id suffixes into relation names (tag_id -> tag)', () => {
+    const Tag = model('tags', {
+      id: f.int().primaryKey().autoIncrement(),
+      name: f.varchar(255)
+    })
+    const Task = model('tasks', {
+      id: f.int().primaryKey().autoIncrement(),
+      tag_id: f.foreignKey(() => Tag, 'id').nullable(),
+      title: f.varchar(255)
+    })
+
+    const related = Task.objects.selectRelated('tag').compile()
+    expect(related.sql).toBe(
+      'select `tasks`.*, `tag`.`id` as `tag__id`, `tag`.`name` as `tag__name` from `tasks` left join `tags` as `tag` on `tasks`.`tag_id` = `tag`.`id`'
+    )
+
+    const filtered = Task.objects.filter({ tag__name__icontains: 'ops' }).compile()
+    expect(filtered.sql).toBe(
+      'select `tasks`.* from `tasks` left join `tags` as `tag` on `tasks`.`tag_id` = `tag`.`id` where `tag`.`name` like ?'
+    )
+    expect(filtered.parameters).toEqual(['%ops%'])
+  })
+
   it('compiles nested FK relation lookups as deterministic join chains', () => {
     const { sql, parameters } = Book.objects
       .filter({ author__organization__name__icontains: 'labs' })

@@ -123,6 +123,7 @@ function isRequired(field: Field): boolean {
 /**
  * The object schema of a read-only nested serializer's output, recursing into
  * deeper nesting. Always `readOnly`: nested serializers never accept input.
+ * Relations behind a nullable FK render as `null`, so their type includes it.
  */
 function nestedObjectSchema(meta: NestedSerializerMetadata): SchemaObject {
   const readOnlyFields = new Set<string>(meta.readOnlyFields)
@@ -137,7 +138,11 @@ function nestedObjectSchema(meta: NestedSerializerMetadata): SchemaObject {
   for (const [name, child] of Object.entries(meta.nested)) {
     properties[name] = nestedObjectSchema(child)
   }
-  return { type: 'object', readOnly: true, properties }
+  return {
+    type: meta.nullable ? ['object', 'null'] : 'object',
+    readOnly: true,
+    properties
+  }
 }
 
 function buildSchema(

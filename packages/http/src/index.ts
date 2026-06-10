@@ -19,11 +19,17 @@ export type {
   SecurityHeadersOptions
 } from './middleware.js'
 
-export interface RequestContext {
+/**
+ * The per-request context handlers receive. `User` is the resolved user's
+ * type: authenticated entry points (`apiView`, viewsets with `authentication`
+ * classes) thread the user type their authentication classes produce, so
+ * `ctx.user` is useful without casts. Plain contexts default to `unknown`.
+ */
+export interface RequestContext<User = unknown> {
   readonly request: Request
   readonly params: Record<string, string>
   readonly query: URLSearchParams
-  readonly user?: unknown
+  readonly user?: User
   json(): Promise<unknown>
 }
 

@@ -60,6 +60,16 @@ const Feature = model('features', {
   name: f.varchar(255),
   enabled: f.boolean().default(false)
 })
+const Tag = model('tags', {
+  id: f.int().primaryKey().autoIncrement(),
+  name: f.varchar(255)
+})
+// snake_case FK column on purpose: `tag_id` exposes the relation `tag`.
+const Task = model('tasks', {
+  id: f.int().primaryKey().autoIncrement(),
+  tag_id: f.foreignKey(() => Tag, 'id').nullable(),
+  title: f.varchar(255)
+})
 
 let db: Kysely<LooseDatabase>
 
@@ -132,10 +142,28 @@ beforeAll(async () => {
       enabled tinyint(1) not null default 0
     )
   `.execute(db)
+  await sql`drop table if exists tasks`.execute(db)
+  await sql`drop table if exists tags`.execute(db)
+  await sql`
+    create table tags (
+      id int primary key auto_increment,
+      name varchar(255) not null
+    )
+  `.execute(db)
+  await sql`
+    create table tasks (
+      id int primary key auto_increment,
+      tag_id int null,
+      title varchar(255) not null,
+      constraint tasks_tag_id_fk foreign key (tag_id) references tags(id) on delete cascade
+    )
+  `.execute(db)
 })
 
 afterAll(async () => {
   if (db !== undefined) {
+    await sql`drop table if exists tasks`.execute(db)
+    await sql`drop table if exists tags`.execute(db)
     await sql`drop table if exists features`.execute(db)
     await sql`drop table if exists posts`.execute(db)
     await sql`drop table if exists books`.execute(db)
@@ -320,6 +348,31 @@ describe('nested and reverse relation traversal against a real MySQL', () => {
         id: labs.id,
         name: 'Tango Labs'
       })
+    })
+  })
+})
+
+describe('nullable snake_case FK relations against a real MySQL', () => {
+  it('inflates a null FK relation as null, not an object of null columns', async () => {
+    await withConnection(db, async () => {
+      const ops = await Tag.objects.create({ name: 'ops' })
+      await Task.objects.create({ tag_id: ops.id, title: 'Tagged' })
+      await Task.objects.create({ tag_id: null, title: 'Untagged' })
+
+      const [tagged] = await Task.objects
+        .selectRelated('tag')
+        .filter({ title: 'Tagged' })
+      expect(tagged?.tag).toEqual({ id: ops.id, name: 'ops' })
+
+      const [untagged] = await Task.objects
+        .selectRelated('tag')
+        .filter({ title: 'Untagged' })
+      // The whole relation is null — never `{ id: null, name: null }`.
+      expect(untagged?.tag).toBeNull()
+
+      // The snake_case column still powers relation filters under `tag`.
+      const opsTasks = await Task.objects.filter({ tag__name: 'ops' })
+      expect(opsTasks.map((task) => task.title)).toEqual(['Tagged'])
     })
   })
 })

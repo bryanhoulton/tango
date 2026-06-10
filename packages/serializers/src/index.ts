@@ -57,12 +57,13 @@ type NoNested = Record<never, never>
 
 /**
  * Validates a `nested` map against a model: keys must be the model's relation
- * names (`authorId` -> `author`) and values must serialize that relation's row
- * shape. Unknown keys collapse to `never`, making them a compile error.
+ * names (`authorId` -> `author`, `author_id` -> `author`) and values must
+ * serialize that relation's row shape. Unknown keys collapse to `never`,
+ * making them a compile error.
  */
 export type NestedSerializersOption<F extends Fields, Nested> = {
   readonly [K in keyof Nested]: K extends keyof RelatedSelects<F>
-    ? NestedSerializerLike<RelatedSelects<F>[K]>
+    ? NestedSerializerLike<NonNullable<RelatedSelects<F>[K]>>
     : never
 }
 
@@ -74,16 +75,24 @@ type NestedOutput<N> = N extends NestedSerializerLike<never, infer Out>
   ? Out
   : never
 
+/** `null` when relation `K` sits behind a nullable FK, else `never`. */
+type NestedRelationNull<F extends Fields, K> = K extends keyof RelatedSelects<F>
+  ? Extract<RelatedSelects<F>[K], null>
+  : never
+
 /**
  * The row shape `serialize` requires: the model's own columns plus, for each
  * nested serializer, the related row it serializes (what `selectRelated`
  * returns — including deeper relations when nested serializers nest again).
+ * Relations behind a nullable FK may be null.
  */
 export type SerializerRow<
   F extends Fields,
   Nested extends NestedSerializerMap = NoNested
 > = InferSelect<F> & {
-  readonly [K in keyof Nested & string]: NestedRow<Nested[K]>
+  readonly [K in keyof Nested & string]:
+    | NestedRow<Nested[K]>
+    | NestedRelationNull<F, K>
 }
 
 export type SerializerOutput<
@@ -92,7 +101,9 @@ export type SerializerOutput<
   Nested extends NestedSerializerMap = NoNested
 > = Prettify<
   Pick<InferSelect<F>, Selected<F, Names>> & {
-    [K in keyof Nested & string]: NestedOutput<Nested[K]>
+    [K in keyof Nested & string]:
+      | NestedOutput<Nested[K]>
+      | NestedRelationNull<F, K>
   }
 >
 

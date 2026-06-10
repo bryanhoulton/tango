@@ -135,3 +135,58 @@ test('models without relations accept no nested keys', () => {
     nested: { author: AuthorSerializer }
   })
 })
+
+// --- Nullable FKs and snake_case columns --------------------------------------
+
+const Tag = model('tags', {
+  id: f.int().primaryKey().autoIncrement(),
+  name: f.varchar(255)
+})
+
+const Item = model('items', {
+  id: f.int().primaryKey().autoIncrement(),
+  tag_id: f.foreignKey(() => Tag, 'id').nullable(),
+  label: f.varchar(255)
+})
+
+const TagSerializer = modelSerializer(Tag, {
+  fields: ['id', 'name'] as const
+})
+
+const ItemSerializer = modelSerializer(Item, {
+  fields: ['id', 'label', 'tag_id'] as const,
+  nested: { tag: TagSerializer }
+})
+
+test('snake_case FK columns nest under the logical relation name', () => {
+  modelSerializer(Item, {
+    fields: ['id', 'label'] as const,
+    // @ts-expect-error the relation is `tag`, not the raw column `tag_id`
+    nested: { tag_id: TagSerializer }
+  })
+})
+
+test('a nullable FK relation accepts and outputs null', () => {
+  const output = ItemSerializer.serialize({
+    id: 1,
+    label: 'Untagged',
+    tag_id: null,
+    tag: null
+  })
+  expectTypeOf(output).toEqualTypeOf<{
+    id: number
+    label: string
+    tag_id: number | null
+    tag: { id: number; name: string } | null
+  }>()
+
+  // A non-nullable FK relation never types as null.
+  const post = PostSerializer.serialize({
+    id: 1,
+    title: 'Hi',
+    authorId: 2,
+    // @ts-expect-error author sits behind a non-nullable FK
+    author: null
+  })
+  void post
+})

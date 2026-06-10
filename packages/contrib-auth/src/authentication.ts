@@ -1,11 +1,17 @@
 import {
   BearerTokenAuthentication,
-  type AuthenticatedUser,
   type Authentication
 } from '@tango-ts/auth'
 import { DoesNotExist } from '@tango-ts/orm'
 
-import { AuthToken, publicUser, User, type AuthTokenRow, type UserRow } from './models.js'
+import {
+  AuthToken,
+  publicUser,
+  User,
+  type AuthTokenRow,
+  type PublicUser,
+  type UserRow
+} from './models.js'
 import { generateToken, hashToken } from './tokens.js'
 
 /**
@@ -74,7 +80,7 @@ function isExpired(row: AuthTokenRow, now: Date): boolean {
  */
 export async function verifyAuthToken(
   token: string
-): Promise<AuthenticatedUser | undefined> {
+): Promise<PublicUser | undefined> {
   const tokenHash = await hashToken(token)
   let row: AuthTokenRow
   try {
@@ -111,7 +117,9 @@ export async function verifyAuthToken(
 /**
  * Ready-made `Authentication` for the built-in token model: validates
  * `Authorization: Bearer tango_...` and puts the public user on `ctx.user`.
+ * Typed as `Authentication<PublicUser>`, so `apiView` handlers and viewset
+ * actions using it see `ctx.user?: PublicUser` — no casts needed.
  */
-export function authTokenAuthentication(): Authentication {
+export function authTokenAuthentication(): Authentication<PublicUser> {
   return new BearerTokenAuthentication({ verifyToken: verifyAuthToken })
 }

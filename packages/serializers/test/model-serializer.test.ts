@@ -218,6 +218,39 @@ describe('nested serializers', () => {
     })
   })
 
+  it('serializes a null relation behind a nullable FK as null', () => {
+    const Tag = model('tags', {
+      id: f.int().primaryKey().autoIncrement(),
+      name: f.varchar(255)
+    })
+    // snake_case FK column: the nested key is the logical name `tag`.
+    const Item = model('items', {
+      id: f.int().primaryKey().autoIncrement(),
+      tag_id: f.foreignKey(() => Tag, 'id').nullable(),
+      label: f.varchar(255)
+    })
+    const TagSerializer = modelSerializer(Tag, {
+      fields: ['id', 'name'] as const
+    })
+    const ItemSerializer = modelSerializer(Item, {
+      fields: ['id', 'label', 'tag_id'] as const,
+      nested: { tag: TagSerializer }
+    })
+
+    expect(
+      ItemSerializer.serialize({ id: 1, label: 'Untagged', tag_id: null, tag: null })
+    ).toEqual({ id: 1, label: 'Untagged', tag_id: null, tag: null })
+
+    expect(
+      ItemSerializer.serialize({
+        id: 2,
+        label: 'Tagged',
+        tag_id: 7,
+        tag: { id: 7, name: 'ops' }
+      })
+    ).toEqual({ id: 2, label: 'Tagged', tag_id: 7, tag: { id: 7, name: 'ops' } })
+  })
+
   it('silently ignores read-only nested keys in input (DRF parity)', () => {
     const serializer = PostSerializer.forUnknownInput({
       title: 'Hi',

@@ -1,5 +1,6 @@
 import { detailResponse, jsonResponse, type RequestContext } from '@tango-ts/http'
 import type {
+  AuthenticatedUser,
   Authentication,
   MaybePromise,
   PermissionCheck
@@ -11,7 +12,7 @@ import {
   runAuthentication
 } from '@tango-ts/auth'
 import type { Fields, InferSelect, InferUpdate, Lookups } from '@tango-ts/core-types'
-import { DoesNotExist, Field } from '@tango-ts/orm'
+import { DoesNotExist, Field, relationNameFor } from '@tango-ts/orm'
 import type { Model, OrderingKey, QuerySet } from '@tango-ts/orm'
 import type {
   ModelSerializerInstance,
@@ -108,6 +109,8 @@ export interface NestedSerializerMetadata {
   readonly fields: readonly string[]
   readonly readOnlyFields: readonly string[]
   readonly modelFields: Fields
+  /** Whether the relation sits behind a nullable FK (the output may be null). */
+  readonly nullable: boolean
   readonly nested: Readonly<Record<string, NestedSerializerMetadata>>
 }
 
@@ -124,37 +127,39 @@ export interface ModelViewSetRouteMetadata<F extends Fields> {
   readonly openApi?: OpenApiOperationOverride
 }
 
-interface ModelViewSetActionCommon {
+interface ModelViewSetActionCommon<User = unknown> {
   readonly name: string
   readonly method: Route['method']
   /**
-   * The action's URL segment — just the action name (e.g. `'close'`), not a
+   * The action's URL segment — just the action name (e.g. `'close'`), never a
    * path pattern. The viewset builds the full route itself: detail actions
    * mount at `/:id/<path>/` (the `/:id/` prefix is prepended automatically)
-   * and collection actions at `/<path>/`.
+   * and collection actions at `/<path>/`. A path containing `:` params (e.g.
+   * `'/:id/close/'`) is a configuration error and throws at route build time.
    */
   readonly path: string
   /**
    * Per-action authentication classes (DRF's `@action(authentication_classes)`).
    * When set, replaces the viewset-level `authentication` for this action.
    */
-  readonly authentication?: readonly Authentication[]
+  readonly authentication?: readonly Authentication<User>[]
   /**
    * Per-action permissions (DRF's `@action(permission_classes)`). When set,
    * replaces the viewset-level `permissions` for this action — including the
    * object-level pass for detail actions.
    */
-  readonly permissions?: readonly PermissionCheck[]
+  readonly permissions?: readonly PermissionCheck<User>[]
   readonly openApi?: OpenApiOperationOverride
 }
 
-export interface ModelViewSetCollectionAction extends ModelViewSetActionCommon {
+export interface ModelViewSetCollectionAction<User = unknown>
+  extends ModelViewSetActionCommon<User> {
   readonly detail?: false
-  readonly handler: (ctx: RequestContext) => MaybePromise<Response>
+  readonly handler: (ctx: RequestContext<User>) => MaybePromise<Response>
 }
 
-export interface ModelViewSetDetailAction<F extends Fields>
-  extends ModelViewSetActionCommon {
+export interface ModelViewSetDetailAction<F extends Fields, User = unknown>
+  extends ModelViewSetActionCommon<User> {
   readonly detail: true
   /**
    * Detail handlers receive the row, already resolved DRF-style: fetched
@@ -162,14 +167,14 @@ export interface ModelViewSetDetailAction<F extends Fields>
    * object-permission pass.
    */
   readonly handler: (
-    ctx: RequestContext,
+    ctx: RequestContext<User>,
     row: InferSelect<F>
   ) => MaybePromise<Response>
 }
 
-export type ModelViewSetAction<F extends Fields = Fields> =
-  | ModelViewSetCollectionAction
-  | ModelViewSetDetailAction<F>
+export type ModelViewSetAction<F extends Fields = Fields, User = unknown> =
+  | ModelViewSetCollectionAction<User>
+  | ModelViewSetDetailAction<F, User>
 
 export interface ModelViewSetOpenApiOverrides {
   readonly list?: OpenApiOperationOverride
@@ -190,7 +195,11 @@ export type ViewSetOrdering<F extends Fields> =
   | (keyof F & string)
   | `-${keyof F & string}`
 
-export interface ModelViewSetOptions<F extends Fields, Out> {
+export interface ModelViewSetOptions<
+  F extends Fields,
+  Out,
+  User = AuthenticatedUser
+> {
   readonly model: Model<string, F>
   readonly serializer: ModelSerializerLike<F, Out>
   /**
@@ -199,7 +208,7 @@ export interface ModelViewSetOptions<F extends Fields, Out> {
    * rows simply do not exist for the caller. Defaults to `model.objects.all()`.
    */
   readonly queryset?: (
-    ctx: RequestContext
+    ctx: RequestContext<NoInfer<User>>
   ) => QuerySet<InferSelect<F>, Lookups<F>>
   /**
    * Object-level permission (DRF's `has_object_permission`) for detail actions,
@@ -207,7 +216,7 @@ export interface ModelViewSetOptions<F extends Fields, Out> {
    * `permissions` may also implement `hasObjectPermission`.
    */
   readonly objectPermission?: (
-    ctx: RequestContext,
+    ctx: RequestContext<NoInfer<User>>,
     row: InferSelect<F>
   ) => MaybePromise<boolean>
   readonly filters?: readonly (keyof Lookups<F> & string)[]
@@ -221,9 +230,16 @@ export interface ModelViewSetOptions<F extends Fields, Out> {
     readonly maxPageSize?: number
   }
   readonly authenticate?: (ctx: RequestContext) => Promise<AuthResult> | AuthResult
-  readonly authentication?: readonly Authentication[]
-  readonly permissions?: readonly PermissionCheck[]
-  readonly actions?: readonly ModelViewSetAction<F>[]
+  /**
+   * Authentication classes. They also decide what `ctx.user` is typed as in
+   * action handlers, `queryset`, `objectPermission`, and permission predicates:
+   * `Authentication<PublicUser>` yields `ctx.user?: PublicUser`.
+   */
+  readonly authentication?: readonly Authentication<User>[]
+  // NoInfer on every other `User` position: only `authentication` decides the
+  // user type — a wider `Permission` or an unannotated handler must not widen it.
+  readonly permissions?: readonly PermissionCheck<NoInfer<User>>[]
+  readonly actions?: readonly ModelViewSetAction<F, NoInfer<User>>[]
   readonly openApi?: ModelViewSetOpenApiOverrides
 }
 
@@ -343,8 +359,24 @@ function nestedRelationPaths(
   return paths
 }
 
+/** Whether relation `name` on a model's field map sits behind a nullable FK. */
+function relationIsNullable(parentFields: Fields, name: string): boolean {
+  for (const [column, fieldDef] of Object.entries(parentFields)) {
+    const field = fieldDef as Field
+    const references = field.spec.references
+    if (
+      references !== undefined &&
+      relationNameFor(column, references.relationName) === name
+    ) {
+      return field.spec.nullable
+    }
+  }
+  return false
+}
+
 function nestedSerializerMetadata(
-  nested: NestedSerializerInfoMap | undefined
+  nested: NestedSerializerInfoMap | undefined,
+  parentFields: Fields
 ): Readonly<Record<string, NestedSerializerMetadata>> {
   const metadata: Record<string, NestedSerializerMetadata> = {}
   for (const [name, child] of Object.entries(nested ?? {})) {
@@ -356,16 +388,35 @@ function nestedSerializerMetadata(
       fields: child.fields ?? Object.keys(modelFields),
       readOnlyFields: child.readOnlyFields ?? [],
       modelFields,
-      nested: nestedSerializerMetadata(child.nested)
+      nullable: relationIsNullable(parentFields, name),
+      nested: nestedSerializerMetadata(child.nested, modelFields)
     }
   }
   return metadata
 }
 
-export class ModelViewSet<F extends Fields, Out> {
+/**
+ * Normalize an action's `path` to its URL segment. Accepts `'close'` or
+ * `'/close/'`; rejects `:` params loudly — the viewset prepends `/:id/` for
+ * detail actions itself, so `path: '/:id/close/'` would double the prefix.
+ */
+function actionPathSegment(action: { name: string; path: string }): string {
+  const trimmed = action.path.replace(/^\/+|\/+$/g, '')
+  if (trimmed.length === 0 || trimmed.includes(':')) {
+    throw new Error(
+      `Invalid path ${JSON.stringify(action.path)} for action "${action.name}": ` +
+        `pass just the action's URL segment (e.g. "close"). The viewset builds ` +
+        `the full route itself — detail actions mount at /:id/<path>/ and ` +
+        `collection actions at /<path>/.`
+    )
+  }
+  return trimmed
+}
+
+export class ModelViewSet<F extends Fields, Out, User = AuthenticatedUser> {
   private readonly pkColumn: string
 
-  constructor(private readonly options: ModelViewSetOptions<F, Out>) {
+  constructor(private readonly options: ModelViewSetOptions<F, Out, User>) {
     this.pkColumn = primaryKeyColumn(options.model.fields)
   }
 
@@ -404,23 +455,26 @@ export class ModelViewSet<F extends Fields, Out> {
         metadata: this.metadata('custom', undefined, 'destroy')
       }
     ]
-    const actionRoute = (action: ModelViewSetAction<F>): ViewSetRoute => ({
-      method: action.method,
-      path: joinPaths(
-        basePath,
-        action.detail === true ? `/:id/${action.path}/` : `/${action.path}/`
-      ),
-      handler: (ctx: RequestContext) =>
-        this.dispatch(
-          ctx,
-          (authedCtx) =>
-            action.detail === true
-              ? this.runDetailAction(authedCtx, action)
-              : Promise.resolve(action.handler(authedCtx)),
-          action
+    const actionRoute = (action: ModelViewSetAction<F, User>): ViewSetRoute => {
+      const segment = actionPathSegment(action)
+      return {
+        method: action.method,
+        path: joinPaths(
+          basePath,
+          action.detail === true ? `/:id/${segment}/` : `/${segment}/`
         ),
-      metadata: this.metadata('custom', action.openApi, action.name)
-    })
+        handler: (ctx: RequestContext) =>
+          this.dispatch(
+            ctx,
+            (authedCtx) =>
+              action.detail === true
+                ? this.runDetailAction(authedCtx, action)
+                : Promise.resolve(action.handler(authedCtx)),
+            action
+          ),
+        metadata: this.metadata('custom', action.openApi, action.name)
+      }
+    }
     const actions = this.options.actions ?? []
     // DRF route ordering: collection actions register before the `/:id/`
     // routes so `GET /users/export/` is not captured by `GET /users/:id/`.
@@ -445,7 +499,10 @@ export class ModelViewSet<F extends Fields, Out> {
       serializer: {
         fields: this.options.serializer.fields ?? Object.keys(this.options.model.fields),
         readOnlyFields: this.options.serializer.readOnlyFields ?? [],
-        nested: nestedSerializerMetadata(this.options.serializer.nested)
+        nested: nestedSerializerMetadata(
+          this.options.serializer.nested,
+          this.options.model.fields
+        )
       },
       openApi
     }
@@ -453,8 +510,11 @@ export class ModelViewSet<F extends Fields, Out> {
 
   private async dispatch(
     ctx: RequestContext,
-    handler: (ctx: RequestContext) => Promise<Response>,
-    overrides?: Pick<ModelViewSetActionCommon, 'authentication' | 'permissions'>
+    handler: (ctx: RequestContext<User>) => Promise<Response>,
+    overrides?: Pick<
+      ModelViewSetActionCommon<User>,
+      'authentication' | 'permissions'
+    >
   ): Promise<Response> {
     // Precedence: the action's (or this viewset's) authentication classes,
     // then the legacy `authenticate` hook, then any user already on the
@@ -474,7 +534,7 @@ export class ModelViewSet<F extends Fields, Out> {
       }
       throw err
     }
-    const authedCtx: RequestContext = { ...ctx, user }
+    const authedCtx = { ...ctx, user } as RequestContext<User>
     const permissions = overrides?.permissions ?? this.options.permissions ?? []
     const denied = await checkPermissions(authedCtx, permissions)
     if (denied !== undefined) {
@@ -489,8 +549,8 @@ export class ModelViewSet<F extends Fields, Out> {
    * pass — using the action's permissions when it declares its own.
    */
   private async runDetailAction(
-    ctx: RequestContext,
-    action: ModelViewSetDetailAction<F>
+    ctx: RequestContext<User>,
+    action: ModelViewSetDetailAction<F, User>
   ): Promise<Response> {
     const id = ctx.params['id']
     if (id === undefined) {
@@ -513,7 +573,9 @@ export class ModelViewSet<F extends Fields, Out> {
     }
   }
 
-  private scopedQuery(ctx: RequestContext): QuerySet<InferSelect<F>, Lookups<F>> {
+  private scopedQuery(
+    ctx: RequestContext<User>
+  ): QuerySet<InferSelect<F>, Lookups<F>> {
     return this.options.queryset === undefined
       ? this.options.model.objects.all()
       : this.options.queryset(ctx)
@@ -553,7 +615,7 @@ export class ModelViewSet<F extends Fields, Out> {
 
   /** Fetch one row by pk through the scoped queryset; out of scope = DoesNotExist. */
   private getScopedObject(
-    ctx: RequestContext,
+    ctx: RequestContext<User>,
     pkValue: string | number
   ): Promise<InferSelect<F>> {
     return this.withNestedRelations(this.scopedQuery(ctx)).get({
@@ -567,9 +629,9 @@ export class ModelViewSet<F extends Fields, Out> {
    * Returns the 403 response on denial, undefined when allowed.
    */
   private async deniedForObject(
-    ctx: RequestContext,
+    ctx: RequestContext<User>,
     row: InferSelect<F>,
-    permissions?: readonly PermissionCheck[]
+    permissions?: readonly PermissionCheck<User>[]
   ): Promise<Response | undefined> {
     const denied = await checkObjectPermissions(
       ctx,
@@ -616,7 +678,7 @@ export class ModelViewSet<F extends Fields, Out> {
   private async paginatedList(
     ctx: RequestContext,
     query: QuerySet<InferSelect<F>, Lookups<F>>,
-    pagination: NonNullable<ModelViewSetOptions<F, Out>['pagination']>
+    pagination: NonNullable<ModelViewSetOptions<F, Out, User>['pagination']>
   ): Promise<PaginationEnvelope<Out>> {
     const page = pageNumber(ctx)
     const size = pageSize(ctx, pagination)
@@ -629,7 +691,7 @@ export class ModelViewSet<F extends Fields, Out> {
     return { count, next, previous, results }
   }
 
-  async list(ctx: RequestContext): Promise<Response> {
+  async list(ctx: RequestContext<User>): Promise<Response> {
     const filters = this.filtersFromQuery(ctx)
     const hasFilters = Object.keys(filters).length > 0
     const base = this.withNestedRelations(this.scopedQuery(ctx))
@@ -646,7 +708,7 @@ export class ModelViewSet<F extends Fields, Out> {
     return jsonResponse(rows.map((row) => this.options.serializer.serialize(row)))
   }
 
-  async retrieve(ctx: RequestContext): Promise<Response> {
+  async retrieve(ctx: RequestContext<User>): Promise<Response> {
     const id = ctx.params['id']
     if (id === undefined) {
       return detailResponse('Not found.', 404)
@@ -686,7 +748,7 @@ export class ModelViewSet<F extends Fields, Out> {
     )
   }
 
-  async partialUpdate(ctx: RequestContext): Promise<Response> {
+  async partialUpdate(ctx: RequestContext<User>): Promise<Response> {
     const id = ctx.params['id']
     if (id === undefined) {
       return detailResponse('Not found.', 404)
@@ -727,7 +789,7 @@ export class ModelViewSet<F extends Fields, Out> {
     }
   }
 
-  async destroy(ctx: RequestContext): Promise<Response> {
+  async destroy(ctx: RequestContext<User>): Promise<Response> {
     const id = ctx.params['id']
     if (id === undefined) {
       return detailResponse('Not found.', 404)
@@ -751,8 +813,8 @@ export class ModelViewSet<F extends Fields, Out> {
   }
 }
 
-export function modelViewSet<F extends Fields, Out>(
-  options: ModelViewSetOptions<F, Out>
-): ModelViewSet<F, Out> {
+export function modelViewSet<F extends Fields, Out, User = AuthenticatedUser>(
+  options: ModelViewSetOptions<F, Out, User>
+): ModelViewSet<F, Out, User> {
   return new ModelViewSet(options)
 }

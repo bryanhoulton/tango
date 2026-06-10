@@ -80,9 +80,16 @@ type FieldLookups<K extends string, F extends AnyFieldDef> = CommonLookups<
   (Base<F> extends string ? StringLookups<K, Base<F>> : object) &
   (Base<F> extends number | Date ? OrderLookups<K, Base<F>> : object)
 
-export type RelationName<K extends string> = K extends `${infer Base}Id`
+/**
+ * The logical relation name a FK column exposes: the column name with its FK
+ * suffix stripped — `authorId` -> `author`, `author_id` -> `author`. Columns
+ * without a recognized suffix keep their name.
+ */
+export type RelationName<K extends string> = K extends `${infer Base}_id`
   ? Base
-  : K
+  : K extends `${infer Base}Id`
+    ? Base
+    : K
 
 type PrefixLookups<Prefix extends string, L> = {
   [K in keyof L & string as `${Prefix}__${K}`]?: L[K]
@@ -131,12 +138,18 @@ export type RelatedSelects<
     {
       [K in keyof F & string]: F[K] extends FieldDef<
         unknown,
-        boolean,
+        infer Nullable,
         boolean,
         infer Related
       >
         ? Related extends Fields
-          ? { [P in RelationName<K>]: InferSelect<Related> }
+          ? {
+              // A nullable FK has no related row when null, so the relation
+              // itself is null — not an object whose columns are all null.
+              [P in RelationName<K>]:
+                | InferSelect<Related>
+                | (Nullable extends true ? null : never)
+            }
           : object
         : object
     }[keyof F & string]
@@ -213,6 +226,24 @@ type RelatedFieldsByName<
   | FieldRelatedFieldsByName<F, Name>
   | DeclaredRelatedFieldsByName<R, Name>
 
+/** `null` when the FK column behind relation `Name` is nullable, else `never`. */
+type RelationNullByName<F extends Fields, Name extends string> = true extends {
+  [K in keyof F & string]: F[K] extends FieldDef<
+    unknown,
+    infer Nullable,
+    boolean,
+    infer Related
+  >
+    ? Related extends Fields
+      ? RelationName<K> extends Name
+        ? Nullable
+        : never
+      : never
+    : never
+}[keyof F & string]
+  ? null
+  : never
+
 type SelectRelatedNested<
   F extends Fields,
   R extends Relations,
@@ -221,14 +252,16 @@ type SelectRelatedNested<
   ? RelatedFieldsByName<F, R, Head> extends infer Related
     ? Related extends Fields
       ? {
-          [K in Head]: InferSelect<Related> &
-            SelectRelatedNested<Related, NoRelations, Tail>
+          [K in Head]:
+            | (InferSelect<Related> &
+                SelectRelatedNested<Related, NoRelations, Tail>)
+            | RelationNullByName<F, Head>
         }
       : object
     : object
   : RelatedFieldsByName<F, R, Path> extends infer Related
     ? Related extends Fields
-      ? { [K in Path]: InferSelect<Related> }
+      ? { [K in Path]: InferSelect<Related> | RelationNullByName<F, Path> }
       : object
     : object
 

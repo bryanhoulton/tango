@@ -151,6 +151,51 @@ test('declared reverse relations expose typed lookups', () => {
   void Organization.objects.filter({ authors__nickname: 'ada' })
 })
 
+test('snake_case _id columns expose the logical relation name', () => {
+  const Tag = model('tags', {
+    id: f.int().primaryKey().autoIncrement(),
+    name: f.varchar(255)
+  })
+  const Task = model('tasks', {
+    id: f.int().primaryKey().autoIncrement(),
+    tag_id: f.foreignKey(() => Tag, 'id').nullable(),
+    title: f.varchar(255)
+  })
+
+  void Task.objects.filter({ tag__name__icontains: 'ops' })
+  void Task.objects.selectRelated('tag')
+  // @ts-expect-error the relation is `tag`, not the raw column `tag_id`
+  void Task.objects.selectRelated('tag_id')
+})
+
+test('selectRelated types a nullable FK relation as | null', () => {
+  const Tag = model('tags', {
+    id: f.int().primaryKey().autoIncrement(),
+    name: f.varchar(255)
+  })
+  const Task = model('tasks', {
+    id: f.int().primaryKey().autoIncrement(),
+    tag_id: f.foreignKey(() => Tag, 'id').nullable(),
+    title: f.varchar(255)
+  })
+
+  const qs = Task.objects.selectRelated('tag')
+  void qs
+  type Row = Awaited<ReturnType<typeof qs.fetch>>[number]
+  expectTypeOf<Row['tag']>().toEqualTypeOf<{ id: number; name: string } | null>()
+
+  // A non-nullable FK relation stays non-null.
+  const posts = Post.objects.selectRelated('author')
+  void posts
+  type PostRow = Awaited<ReturnType<typeof posts.fetch>>[number]
+  expectTypeOf<PostRow['author']>().toEqualTypeOf<{
+    id: number
+    email: string
+    age: number | null
+    name: string
+  }>()
+})
+
 test('nested selectRelated narrows rows with nested related shapes', () => {
   const qs = Book.objects.selectRelated('author__organization')
   void qs

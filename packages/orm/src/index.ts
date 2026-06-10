@@ -6,7 +6,7 @@ export type {
   ReferenceTarget,
   ReferentialAction
 } from './fields.js'
-export { model, Manager } from './model.js'
+export { model, Manager, relationNameFor } from './model.js'
 export type { Model, ModelOptions, RelationSpec } from './model.js'
 export { r, Relation } from './relations.js'
 export type { HasManySpec, RelationMap, RelationTarget } from './relations.js'

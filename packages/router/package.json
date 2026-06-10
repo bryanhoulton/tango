@@ -1,6 +1,6 @@
 {
   "name": "@tango-ts/router",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "description": "Serverless-friendly router for Tango Web Request handlers.",
   "license": "MIT",
   "type": "module",
