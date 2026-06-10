@@ -1,5 +1,15 @@
 # @tango-ts/openapi
 
+## 0.7.0
+
+### Patch Changes
+
+- Updated dependencies [ed15d6b]
+  - @tango-ts/server@0.7.0
+  - @tango-ts/orm@0.7.0
+  - @tango-ts/router@0.7.0
+  - @tango-ts/views@0.7.0
+
 ## 0.6.0
 
 ### Minor Changes
