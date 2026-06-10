@@ -14,8 +14,8 @@ Web-standard `Request` / `Response` handlers, so the same app runs locally, in a
 container, or serverless on Vercel without changes.
 
 Tango is still early. The ORM, migrations, serializers, router, viewsets, auth
-primitives, the admin, OpenAPI generation, middleware, Node and Vercel adapters,
-and CLI scaffolding exist. Caching and more deployment adapters (Lambda,
+primitives, OpenAPI generation, middleware, Node and Vercel adapters, and CLI
+scaffolding exist. Admin, caching, and more deployment adapters (Lambda,
 Cloudflare Workers) are part of the direction, not the current quickstart
 surface.
 
@@ -44,6 +44,7 @@ shop/
         models.ts
         serializers.ts
         routes.ts
+        functions/
         migrations/
 ```
 
@@ -61,27 +62,45 @@ curl http://127.0.0.1:8000/core/health/live/
 ```
 
 `src/project.ts` is the project entrypoint. It creates a Web handler by combining
-the root routes, nested apps, and the database connection:
+the root routes, a list of apps, and the database connection:
 
 ```ts
 import { addOpenApiRoute } from '@tango-ts/openapi'
 import { defineProject, mysqlFromEnv } from '@tango-ts/server'
 
 import { app as coreApp } from './apps/core/app.js'
-import { routes as coreRoutes } from './apps/core/routes.js'
 import { routes } from './routes.js'
 
 export const project = defineProject({
   name: 'shop',
   database: mysqlFromEnv({ projectName: 'shop' }),
   routes,
-  apps: [{ path: '/core', app: coreApp, routes: coreRoutes }]
+  apps: [coreApp]
 })
 
 // Serves the generated OpenAPI 3.1 document at GET /openapi.json.
 addOpenApiRoute(project)
 
 export default project
+```
+
+Each app declares itself in one object — models, routes, and internal
+functions together (`src/apps/core/app.ts`):
+
+```ts
+import { defineApp } from '@tango-ts/server'
+
+import { functions } from './functions/index.js'
+import { models } from './models.js'
+import { routes } from './routes.js'
+
+export const app = defineApp({
+  name: 'core', // mounts at /core by default (override with `path`)
+  models,
+  routes,
+  functions,
+  migrationsDir: new URL('./migrations', import.meta.url).pathname
+})
 ```
 
 ## Key Concepts
@@ -104,6 +123,13 @@ is enough for list, retrieve, create, patch, and delete routes.
 
 **Router:** explicit route registration over Web-standard requests. There is no
 filesystem routing or Express-style request object.
+
+**Functions:** internal serverless functions in each app's `functions/` folder.
+Never exposed as API routes — invoked from inside Tango logic with
+`fn.invoke(payload)` (awaited, typed result) or `fn.defer(payload)`
+(fire-and-forget). Locally they run in-process; on Vercel each invocation runs
+as its own function invocation over a signed internal channel
+(`TANGO_FUNCTIONS_SECRET`).
 
 **Migrations:** generated from model snapshots and applied at deploy time or during
 local setup. They are never run during request handling.
@@ -184,81 +210,22 @@ project:
 yarn tango startapp billing --directory src/apps/billing
 ```
 
-Then import the new app and routes in `src/project.ts` and add it to `apps`:
+Then import the new app in `src/project.ts` and add it to `apps`:
 
 ```ts
 import { app as billingApp } from './apps/billing/app.js'
-import { routes as billingRoutes } from './apps/billing/routes.js'
 
 export const project = defineProject({
   name: 'shop',
   database: mysqlFromEnv({ projectName: 'shop' }),
   routes,
-  apps: [
-    { path: '/core', app: coreApp, routes: coreRoutes },
-    { path: '/billing', app: billingApp, routes: billingRoutes }
-  ]
+  apps: [coreApp, billingApp]
 })
 ```
 
 Each app owns its own migration directory. For now, generated scripts target the
 starter `core` app; additional apps should get their own migration scripts or CI
 steps.
-
-## Admin
-
-Tango ships a Django-style admin, split in half for serverless: `@tango-ts/admin`
-registers JSON endpoints on the project (model metadata, staff-gated auth, CRUD
-viewsets), and `@tango-ts/admin-ui` is a prebuilt React SPA served as static
-assets. Server code never imports the UI package, so the admin adds no React to
-the Vercel function bundle — that separation is enforced in CI by a bundle
-trace test.
-
-Register models in `src/project.ts`, the same pattern as `addOpenApiRoute`:
-
-```ts
-import { addAdminRoutes, adminModel } from '@tango-ts/admin'
-
-addAdminRoutes(project, {
-  models: [
-    adminModel(Post, {
-      listDisplay: ['id', 'title', 'published'],
-      searchFields: ['title'],
-      listFilters: ['published']
-    })
-  ]
-})
-```
-
-`adminModel(Post)` with no options also works: every field is shown, primary
-keys and auto-managed timestamps are read-only, and lists sort by primary key.
-Field names are typechecked against the model.
-
-The admin authenticates with the contrib-auth token model and only admits
-`isStaff` / `isSuperuser` users. Apply the contrib-auth migrations, then create
-the first account:
-
-```sh
-yarn tango migrate --app node_modules/@tango-ts/contrib-auth/dist/app.js
-yarn tango createsuperuser --email you@example.com
-```
-
-Serve the UI by copying the prebuilt assets into your static directory — on
-Vercel, make the build command:
-
-```sh
-cp -r node_modules/@tango-ts/admin-ui/dist public/admin
-```
-
-Static files win over the catch-all rewrite, so `/admin/` is served from the
-CDN while `/admin/api/*` is routed to the function. The SPA uses hash routing
-and relative asset URLs, so no extra rewrites are needed. Log in at `/admin/`.
-
-What you get: a sidebar of registered models, list views with search
-(`searchFields`), filters (`listFilters`), and server-side pagination,
-create/edit modals with widgets per column type and per-field validation
-errors straight from the serializer, foreign-key pickers that search the
-related model, and delete confirmations.
 
 ## Deployment
 

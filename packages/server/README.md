@@ -2,24 +2,31 @@
 
 ## Responsibility
 
-Declarative server entrypoint helpers for Tango apps. This package hides the low-level
+Declarative server entrypoint helpers for Tango apps. This package owns the
+user-facing app declaration (`defineApp`), hides the low-level
 `withConnection(db, () => router.handle(request))` wiring behind `defineServer`, and
 provides `mysqlFromEnv()` for local/dev defaults. It does not own HTTP adapters,
 routing, views, ORM behavior, or migrations.
 
 ## What it responds to
 
-- A Tango app (`defineApp(...)`) when available.
+- App declarations from `defineApp(...)`.
 - A declarative router from `defineRoutes(...)`.
 - A Kysely database connection.
 
 ## Functionality
 
-- `defineServer({ app, routes, database, middleware, authentication })` -> Web handler.
-- `defineProject({ name, database, routes, apps, middleware, authentication })` ->
-  named Web handler for a root project with nested apps. Middleware run
-  outermost-first, inside the request's database scope. The handler exposes
-  `dispose()` to release the database pool at process shutdown.
+- `defineApp({ name, path?, models, routes, functions, migrationsDir })` -> a
+  self-contained app: models, mounted routes (defaults to `/<name>`), and
+  internal functions in one object. Satisfies the ORM's `TangoApp` contract, so
+  the CLI's migration commands consume the same module.
+- `defineServer({ app, routes, database, middleware, authentication, functionRuntime })` -> Web handler.
+- `defineProject({ name, database, routes, apps, middleware, authentication, functions })` ->
+  named Web handler for a root project; `apps` is just a list of `defineApp`
+  results. Middleware run outermost-first, inside the request's database scope.
+  Registers each app's internal functions and (under the http transport) mounts
+  the signed dispatch route. The handler exposes `dispose()`, which drains
+  deferred function work and releases the database pool at process shutdown.
 - `authentication` (project-level, DRF's default authentication classes): runs for
   every request — viewsets *and* plain routes — and places the resolved user on
   `ctx.user`. Invalid credentials short-circuit with a 401; absent credentials
@@ -35,10 +42,9 @@ routing, views, ORM behavior, or migrations.
 
 ## Design patterns that matter here
 
-- **Clear developer surface:** app code declares app, routes, and server; framework code
-  owns the request/database scope wiring.
-- **Nested apps:** project code composes app declarations and route collections under
-  path prefixes.
+- **Clear developer surface:** an app is one object (models + routes + functions);
+  the project is a list of apps; framework code owns the request/database scope wiring.
+- **Nested apps:** each app carries its own mount path (defaulting to its name).
 - **Project metadata:** project names are carried by the returned handler and can be
   reused by OpenAPI, database defaults, logging, and future tooling.
 - **Serverless-safe:** still returns a Web handler, so adapters can wrap it for local

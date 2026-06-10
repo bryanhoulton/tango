@@ -39,6 +39,43 @@ All configuration comes from environment variables (see `.env.example`):
 When `NODE_ENV=production`, database settings are required — the server fails at
 startup instead of silently using development defaults.
 
+## Internal functions
+
+Each app has a `functions/` folder for internal serverless functions: typed
+units of work that are never exposed as API routes, but can be invoked from
+anywhere inside Tango logic.
+
+```ts
+// src/apps/core/functions/sendWelcomeEmail.ts
+import { defineFunction } from '@tango-ts/functions'
+
+export const sendWelcomeEmail = defineFunction({
+  name: 'sendWelcomeEmail',
+  handler: async (payload: { userId: number }) => {
+    // Model.objects works here — no setup needed.
+  }
+})
+```
+
+List it in `functions/index.ts` (already registered on the app in `app.ts`),
+then call it from a route or viewset:
+
+```ts
+await sendWelcomeEmail.invoke({ userId: user.id }) // awaited, typed result
+sendWelcomeEmail.defer({ userId: user.id })        // fire-and-forget
+```
+
+Locally functions run in-process. On Vercel each invocation runs as its own
+function invocation (own timeout and memory budget) dispatched over a signed
+internal channel — set the secret once:
+
+```sh
+vercel env add TANGO_FUNCTIONS_SECRET   # any long random string
+```
+
+To exercise the production dispatch path locally, set
+`TANGO_FUNCTIONS_TRANSPORT=http` and `TANGO_FUNCTIONS_URL=http://127.0.0.1:8000`.
+
 ## Deployment
 
 Two paths ship out of the box: serverless on Vercel, or a long-running Node

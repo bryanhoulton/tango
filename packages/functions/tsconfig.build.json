@@ -7,11 +7,7 @@
   },
   "include": ["src/**/*.ts"],
   "references": [
-    { "path": "../adapters/tsconfig.build.json" },
-    { "path": "../auth/tsconfig.build.json" },
-    { "path": "../functions/tsconfig.build.json" },
     { "path": "../http/tsconfig.build.json" },
-    { "path": "../orm/tsconfig.build.json" },
-    { "path": "../router/tsconfig.build.json" }
+    { "path": "../orm/tsconfig.build.json" }
   ]
 }

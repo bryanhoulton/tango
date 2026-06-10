@@ -14,3 +14,12 @@ TANGO_DB_NAME=__PROJECT_DB_NAME__
 
 # Connection pool size:
 # TANGO_DB_POOL_SIZE=10
+
+# Internal serverless functions (src/apps/*/functions/). Locally they run
+# in-process; on Vercel they dispatch over a signed internal channel and the
+# secret is required (`vercel env add TANGO_FUNCTIONS_SECRET`):
+# TANGO_FUNCTIONS_SECRET=generate-a-long-random-string
+
+# Exercise the production (http) dispatch path locally:
+# TANGO_FUNCTIONS_TRANSPORT=http
+# TANGO_FUNCTIONS_URL=http://127.0.0.1:8000
