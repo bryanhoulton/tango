@@ -14,9 +14,11 @@ import {
   type RenameHints,
   type SchemaSnapshot
 } from '@tango-ts/migrations'
+import { createSuperuser, type UserRow } from '@tango-ts/contrib-auth'
 import {
   createMysqlConnection,
   mysqlConfigFromEnv,
+  withConnection,
   type LooseDatabase,
   type MysqlConnectionConfig,
   type TangoApp
@@ -444,6 +446,56 @@ export async function migrateApp(options: MigrateAppOptions): Promise<string[]> 
       name: `${options.app.name}.${file.migration.name}`
     }))
   )
+}
+
+export interface CreateSuperuserOptions {
+  readonly email: string
+  readonly password: string
+  readonly firstName?: string
+  readonly lastName?: string
+  /** Override the database name from the environment. */
+  readonly database?: string
+}
+
+function isDuplicateEntryError(err: unknown): boolean {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    (err as { code?: unknown }).code === 'ER_DUP_ENTRY'
+  )
+}
+
+/**
+ * `tango createsuperuser` — Django's bootstrap command. Connects using the
+ * same environment resolution as `migrate` and creates an `isStaff` +
+ * `isSuperuser` user via `@tango-ts/contrib-auth`. Requires the contrib-auth
+ * migrations to have been applied.
+ */
+export async function createSuperuserCommand(
+  options: CreateSuperuserOptions
+): Promise<UserRow> {
+  const dbOptions = {
+    ...mysqlConnectionOptionsFromEnv(),
+    ...(options.database === undefined ? {} : { database: options.database })
+  }
+  const db = createMysqlConnection(dbOptions)
+  try {
+    return await withConnection(db, () =>
+      createSuperuser({
+        email: options.email,
+        password: options.password,
+        firstName: options.firstName,
+        lastName: options.lastName
+      })
+    )
+  } catch (err) {
+    if (isDuplicateEntryError(err)) {
+      throw new Error(`A user with email ${options.email} already exists.`)
+    }
+    throw err
+  } finally {
+    await db.destroy()
+  }
 }
 
 export async function loadApp(path: string): Promise<TangoApp> {

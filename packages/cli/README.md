@@ -11,8 +11,8 @@ rendering, ORM behavior, or adapter internals.
 ## What it responds to
 
 - A `TangoApp` from `defineApp({ models, migrationsDir })`.
-- `startproject`, `startapp`, `makemigrations`, `check`, `migrate`, and `serve`
-  commands.
+- `startproject`, `startapp`, `makemigrations`, `check`, `migrate`,
+  `createsuperuser`, and `serve` commands.
 - A deploy-time database connection for `migrate`.
 - A Web handler module for `serve`.
 
@@ -28,6 +28,10 @@ rendering, ORM behavior, or adapter internals.
   configured TLS settings, and tolerates managed MySQL that forbids
   `CREATE DATABASE` (PlanetScale) as long as the target database is reachable.
 - `migrateApp(...)` — applies generated migrations via the shared executor.
+- `createSuperuserCommand(...)` / `tango createsuperuser --email ... --password ...`
+  — bootstraps an `isStaff` + `isSuperuser` user via `@tango-ts/contrib-auth`
+  (password may come from `TANGO_SUPERUSER_PASSWORD` to stay out of shell
+  history). Requires the contrib-auth migrations to be applied.
 - `loadHandler(path)` — loads a default/exported Web handler or router-like object
   with `handle(request)`.
 - `runServer(...)` — the `tango serve` implementation: serves the built handler,

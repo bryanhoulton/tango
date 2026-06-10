@@ -24,6 +24,11 @@ export interface RouteDefinition {
 
 export type RouteSource = Router | Routable | readonly RouteDefinition[]
 
+export interface HandleOptions {
+  /** Pre-resolved user placed on every matched route's context. */
+  readonly user?: unknown
+}
+
 interface Match {
   readonly route: Route
   readonly params: Record<string, string>
@@ -117,14 +122,14 @@ export class Router {
     )
   }
 
-  async handle(request: Request): Promise<Response> {
+  async handle(request: Request, options: HandleOptions = {}): Promise<Response> {
     const match = this.match(request)
     if (match === undefined) {
       return this.pathExists(request)
         ? detailResponse('Method not allowed.', 405)
         : detailResponse('Not found.', 404)
     }
-    const ctx = createRequestContext(request, match.params)
+    const ctx = createRequestContext(request, match.params, { user: options.user })
     return match.route.handler(ctx)
   }
 }

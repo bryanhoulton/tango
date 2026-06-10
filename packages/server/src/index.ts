@@ -1,7 +1,17 @@
 import type { Kysely } from 'kysely'
 
 import type { WebHandler } from '@tango-ts/adapters'
-import { applyMiddleware, type Middleware } from '@tango-ts/http'
+import {
+  AuthenticationFailed,
+  runAuthentication,
+  type Authentication
+} from '@tango-ts/auth'
+import {
+  applyMiddleware,
+  createRequestContext,
+  detailResponse,
+  type Middleware
+} from '@tango-ts/http'
 import {
   createMysqlConnection,
   mysqlConfigFromEnv,
@@ -21,6 +31,15 @@ export interface ServerConfig {
    * the request's database scope, so they may use the ORM.
    */
   readonly middleware?: readonly Middleware[]
+  /**
+   * Project-level authentication (DRF's default authentication classes). Runs
+   * for every request — viewsets *and* plain routes — and places the resolved
+   * user on `ctx.user`. Invalid credentials short-circuit with a 401; absent
+   * credentials proceed unauthenticated (permissions decide what that means).
+   * Viewsets and `apiView` routes may still declare their own `authentication`
+   * to override.
+   */
+  readonly authentication?: readonly Authentication[]
 }
 
 export interface ProjectAppConfig {
@@ -35,6 +54,8 @@ export interface ProjectConfig {
   readonly routes?: Router
   readonly apps?: readonly ProjectAppConfig[]
   readonly middleware?: readonly Middleware[]
+  /** Project-level authentication classes. See `ServerConfig.authentication`. */
+  readonly authentication?: readonly Authentication[]
 }
 
 export interface TangoProject extends WebHandler {
@@ -58,10 +79,25 @@ export function mysqlFromEnv(options: MysqlEnvOptions = {}): Kysely<LooseDatabas
 }
 
 export function defineServer(config: ServerConfig): WebHandler {
-  const handle = applyMiddleware(
-    (request) => config.routes.handle(request),
-    config.middleware ?? []
-  )
+  const authentication = config.authentication ?? []
+  const routeRequest = async (request: Request): Promise<Response> => {
+    if (authentication.length === 0) {
+      return config.routes.handle(request)
+    }
+    // Authentication only reads the request (headers), so it runs before route
+    // matching on a context without params.
+    const probe = createRequestContext(request, {})
+    try {
+      const user = await runAuthentication(probe, authentication)
+      return config.routes.handle(request, { user })
+    } catch (err) {
+      if (err instanceof AuthenticationFailed) {
+        return detailResponse(err.message, 401)
+      }
+      throw err
+    }
+  }
+  const handle = applyMiddleware(routeRequest, config.middleware ?? [])
   return (request) => withConnection(config.database, () => handle(request))
 }
 
@@ -76,7 +112,8 @@ export function defineProject(config: ProjectConfig): TangoProject {
   const handler = defineServer({
     routes,
     database: config.database,
-    middleware: config.middleware
+    middleware: config.middleware,
+    authentication: config.authentication
   }) as TangoProject
   Object.defineProperty(handler, 'name', {
     value: config.name,

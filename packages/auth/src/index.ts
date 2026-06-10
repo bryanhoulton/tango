@@ -1,4 +1,4 @@
-import type { RequestContext } from '@tango-ts/http'
+import { detailResponse, type RequestContext } from '@tango-ts/http'
 
 export type MaybePromise<T> = T | Promise<T>
 
@@ -105,5 +105,125 @@ export const IsAdminUser: Permission = {
   hasPermission: (ctx) => {
     const user = userRecord(ctx)
     return user?.isStaff === true || user?.isSuperuser === true
+  }
+}
+
+/** A permission class or a bare predicate (treated as not requiring auth). */
+export type PermissionCheck =
+  | Permission
+  | ((ctx: RequestContext) => MaybePromise<boolean>)
+
+export interface AuthPipelineOptions {
+  readonly authentication?: readonly Authentication[]
+  readonly permissions?: readonly PermissionCheck[]
+}
+
+/**
+ * Run authentication classes in order; the first one that identifies a user
+ * wins. Classes that don't match the request (e.g. no `Authorization` header
+ * for their scheme) return `undefined` and the next is tried. Invalid
+ * credentials raise `AuthenticationFailed` (mapped to a 401 by callers).
+ */
+export async function runAuthentication(
+  ctx: RequestContext,
+  authentication: readonly Authentication[]
+): Promise<AuthenticatedUser | undefined> {
+  for (const authenticator of authentication) {
+    const user = await authenticator.authenticate(ctx)
+    if (user !== undefined) {
+      return user
+    }
+  }
+  return undefined
+}
+
+/**
+ * Evaluate permissions against an (already authenticated) context. Returns
+ * the DRF-style denial response — 401 for missing credentials, 403 for denial
+ * — or `undefined` when every permission allows the request.
+ */
+export async function checkPermissions(
+  ctx: RequestContext,
+  permissions: readonly PermissionCheck[]
+): Promise<Response | undefined> {
+  for (const permission of permissions) {
+    const requiresAuthentication =
+      typeof permission === 'function'
+        ? false
+        : permission.requiresAuthentication === true
+    if (requiresAuthentication && ctx.user === undefined) {
+      return detailResponse('Authentication credentials were not provided.', 401)
+    }
+    const allowed =
+      typeof permission === 'function'
+        ? await permission(ctx)
+        : await permission.hasPermission(ctx)
+    if (!allowed) {
+      return detailResponse('Permission denied.', 403)
+    }
+  }
+  return undefined
+}
+
+/**
+ * Run the object-level pass (DRF's `has_object_permission`) for permission
+ * classes that implement it. Returns the 403 response on denial.
+ */
+export async function checkObjectPermissions(
+  ctx: RequestContext,
+  permissions: readonly PermissionCheck[],
+  obj: unknown
+): Promise<Response | undefined> {
+  for (const permission of permissions) {
+    if (typeof permission === 'function') {
+      continue
+    }
+    if (
+      permission.hasObjectPermission !== undefined &&
+      !(await permission.hasObjectPermission(ctx, obj))
+    ) {
+      return detailResponse('Permission denied.', 403)
+    }
+  }
+  return undefined
+}
+
+export type ApiViewHandler = (
+  ctx: RequestContext
+) => MaybePromise<Response>
+
+/**
+ * DRF's `@api_view` for plain routes: wraps a handler so it runs the same
+ * authentication + permission pipeline as `ModelViewSet`. The handler receives
+ * a context whose `user` is set by the authentication classes (falling back to
+ * any user already on the context, e.g. from project-level authentication).
+ *
+ * ```ts
+ * route('GET', '/me/', apiView(
+ *   { authentication: [auth], permissions: [IsAuthenticated] },
+ *   (ctx) => jsonResponse(ctx.user)
+ * ))
+ * ```
+ */
+export function apiView(
+  options: AuthPipelineOptions,
+  handler: ApiViewHandler
+): ApiViewHandler {
+  return async (ctx) => {
+    let user = ctx.user
+    try {
+      user = (await runAuthentication(ctx, options.authentication ?? [])) ?? user
+    } catch (err) {
+      if (err instanceof AuthenticationFailed) {
+        return detailResponse(err.message, 401)
+      }
+      throw err
+    }
+    const authedCtx: RequestContext = { ...ctx, user }
+    const denied = await checkPermissions(authedCtx, options.permissions ?? [])
+    if (denied !== undefined) {
+      return denied
+    }
+    return handler(authedCtx)
   }
 }

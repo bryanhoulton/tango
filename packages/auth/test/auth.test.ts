@@ -4,6 +4,7 @@ import { createRequestContext } from '@tango-ts/http'
 
 import {
   AllowAny,
+  apiView,
   AuthenticationFailed,
   BearerTokenAuthentication,
   IsAdminUser,
@@ -84,5 +85,71 @@ describe('permission classes', () => {
         IsAdminUser.hasPermission({ ...ctx(), user: { id: 1, isSuperuser: true } })
       )
     ).resolves.toBe(true)
+  })
+})
+
+describe('apiView (plain-route auth pipeline)', () => {
+  const auth = new BearerTokenAuthentication({
+    verifyToken: (token) =>
+      token === 'good' ? { id: 7, isStaff: false } : undefined
+  })
+
+  const view = apiView(
+    { authentication: [auth], permissions: [IsAuthenticated] },
+    (viewCtx) => Response.json({ user: viewCtx.user })
+  )
+
+  it('401s when credentials are required but absent', async () => {
+    const response = await view(ctx())
+    expect(response.status).toBe(401)
+    expect(await response.json()).toEqual({
+      detail: 'Authentication credentials were not provided.'
+    })
+  })
+
+  it('401s for invalid credentials', async () => {
+    const response = await view(ctx({ authorization: 'Bearer bad' }))
+    expect(response.status).toBe(401)
+    expect(await response.json()).toEqual({ detail: 'Invalid token.' })
+  })
+
+  it('places the authenticated user on ctx.user', async () => {
+    const response = await view(ctx({ authorization: 'Bearer good' }))
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ user: { id: 7, isStaff: false } })
+  })
+
+  it('falls back to a user already on the context (project-level auth)', async () => {
+    const view2 = apiView({ permissions: [IsAuthenticated] }, (viewCtx) =>
+      Response.json({ user: viewCtx.user })
+    )
+    const response = await view2({ ...ctx(), user: { id: 42 } })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ user: { id: 42 } })
+  })
+
+  it('403s when a permission denies an authenticated user', async () => {
+    const adminView = apiView(
+      { authentication: [auth], permissions: [IsAdminUser] },
+      () => Response.json({ ok: true })
+    )
+    const response = await adminView(ctx({ authorization: 'Bearer good' }))
+    expect(response.status).toBe(403)
+    expect(await response.json()).toEqual({ detail: 'Permission denied.' })
+  })
+
+  it('supports bare predicate permissions', async () => {
+    const flagged = apiView(
+      { permissions: [(viewCtx) => viewCtx.query.get('allow') === '1'] },
+      () => Response.json({ ok: true })
+    )
+    const allowed = await flagged(
+      createRequestContext(new Request('https://example.test/?allow=1'), {})
+    )
+    const denied = await flagged(
+      createRequestContext(new Request('https://example.test/?allow=0'), {})
+    )
+    expect(allowed.status).toBe(200)
+    expect(denied.status).toBe(403)
   })
 })

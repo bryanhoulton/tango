@@ -50,9 +50,15 @@ export function detailResponse(detail: string, status: number): Response {
   return jsonResponse({ detail }, { status })
 }
 
+export interface RequestContextOptions {
+  /** Pre-resolved user (e.g. from project-level authentication). */
+  readonly user?: unknown
+}
+
 export function createRequestContext(
   request: Request,
-  params: Record<string, string>
+  params: Record<string, string>,
+  options: RequestContextOptions = {}
 ): RequestContext {
   const url = new URL(request.url)
   let parsed: Promise<unknown> | undefined
@@ -61,6 +67,7 @@ export function createRequestContext(
     request,
     params,
     query: url.searchParams,
+    user: options.user,
     json(): Promise<unknown> {
       parsed ??= request.json()
       return parsed

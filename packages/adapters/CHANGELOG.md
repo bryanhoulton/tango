@@ -1,5 +1,12 @@
 # @tango-ts/adapters
 
+## 0.5.0
+
+### Patch Changes
+
+- Updated dependencies
+  - @tango-ts/http@0.5.0
+
 ## 0.4.0
 
 ### Patch Changes

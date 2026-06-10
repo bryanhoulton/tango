@@ -10,5 +10,9 @@
     "packages/*/templates/**/*.ts",
     "apps/**/*.ts",
     "*.config.ts"
-  ]
+  ],
+  // admin-ui is a standalone Vite React app with its own tsconfig (jsx,
+  // DOM lib, `@/*` alias); it typechecks itself and must not be swept into
+  // the root Node-oriented project.
+  "exclude": ["packages/admin-ui/**"]
 }

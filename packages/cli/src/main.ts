@@ -3,6 +3,7 @@ import { createMysqlConnection } from '@tango-ts/orm'
 
 import {
   checkMigrations,
+  createSuperuserCommand,
   ensureMysqlDatabase,
   loadApp,
   makemigrations,
@@ -81,6 +82,28 @@ async function main(): Promise<void> {
     return
   }
 
+  if (command === 'createsuperuser') {
+    const email = valueAfter(args, '--email')
+    if (email === undefined) {
+      throw new Error('Missing --email <address>.')
+    }
+    // Prefer the env variable in CI so the password stays out of shell history.
+    const password =
+      valueAfter(args, '--password') ?? process.env.TANGO_SUPERUSER_PASSWORD
+    if (password === undefined || password.length === 0) {
+      throw new Error('Missing --password (or set TANGO_SUPERUSER_PASSWORD).')
+    }
+    const user = await createSuperuserCommand({
+      email,
+      password,
+      firstName: valueAfter(args, '--first-name'),
+      lastName: valueAfter(args, '--last-name'),
+      database: valueAfter(args, '--database')
+    })
+    console.log(`Created superuser ${user.email} (id ${user.id}).`)
+    return
+  }
+
   const appPath = valueAfter(args, '--app')
   if (appPath === undefined) {
     throw new Error('Missing --app <path-to-app-module>.')
@@ -131,7 +154,7 @@ async function main(): Promise<void> {
   }
 
   throw new Error(
-    `Unknown command "${command ?? ''}". Use startproject, startapp, makemigrations, migrate, check, serve, or dev.`
+    `Unknown command "${command ?? ''}". Use startproject, startapp, makemigrations, migrate, check, createsuperuser, serve, or dev.`
   )
 }
 

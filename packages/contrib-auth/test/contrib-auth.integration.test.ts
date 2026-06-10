@@ -3,13 +3,15 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { IsAdminUser, IsAuthenticated } from '@tango-ts/auth'
 import { migrateApp } from '@tango-ts/cli'
+import { jsonResponse } from '@tango-ts/http'
 import {
   createMysqlConnection,
   withConnection,
   type LooseDatabase
 } from '@tango-ts/orm'
-import { createRouter, include, type Router } from '@tango-ts/router'
+import { createRouter, include, route, type Router } from '@tango-ts/router'
 import { modelSerializer } from '@tango-ts/serializers'
+import { defineServer } from '@tango-ts/server'
 import { modelViewSet } from '@tango-ts/views'
 
 import { app } from '../src/app.js'
@@ -334,6 +336,94 @@ describe('token lifecycle', () => {
       })
     )
     expect(response.status).toBe(401)
+  })
+})
+
+describe('project-level authentication (defineServer)', () => {
+  // A project configured once with `authentication`: plain routes and viewsets
+  // both see ctx.user without any per-route or per-viewset auth wiring.
+  function buildServer() {
+    const projectRouter = createRouter()
+    include('/auth', authRoutes()).register(projectRouter)
+    route('GET', '/whoami/', (ctx) =>
+      jsonResponse({ user: ctx.user ?? null })
+    ).register(projectRouter)
+    projectRouter.register(
+      '/protected-users',
+      modelViewSet({
+        model: User,
+        serializer: UserSerializer,
+        permissions: [IsAuthenticated]
+        // No `authentication` here on purpose: it must inherit ctx.user.
+      })
+    )
+    return defineServer({
+      routes: projectRouter,
+      database: db,
+      authentication: [authTokenAuthentication()]
+    })
+  }
+
+  it('sets ctx.user on plain routes with zero per-route wiring', async () => {
+    const server = buildServer()
+    const token = await loginToken('ada@example.com', 'ada-pass-123')
+
+    const authed = await server(
+      new Request('https://example.test/whoami/', {
+        headers: { authorization: `Bearer ${token}` }
+      })
+    )
+    expect(authed.status).toBe(200)
+    const body = (await authed.json()) as { user: { email?: string } | null }
+    expect(body.user?.email).toBe('ada@example.com')
+  })
+
+  it('leaves anonymous requests unauthenticated instead of rejecting them', async () => {
+    const server = buildServer()
+    const response = await server(new Request('https://example.test/whoami/'))
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ user: null })
+  })
+
+  it('rejects invalid credentials globally with a 401', async () => {
+    const server = buildServer()
+    const response = await server(
+      new Request('https://example.test/whoami/', {
+        headers: { authorization: 'Bearer tango_not-a-real-token' }
+      })
+    )
+    expect(response.status).toBe(401)
+    expect(await response.json()).toEqual({ detail: 'Invalid token.' })
+  })
+
+  it('flows ctx.user into viewsets that declare no authentication', async () => {
+    const server = buildServer()
+
+    const anonymous = await server(
+      new Request('https://example.test/protected-users/')
+    )
+    expect(anonymous.status).toBe(401)
+
+    const token = await loginToken('ada@example.com', 'ada-pass-123')
+    const authed = await server(
+      new Request('https://example.test/protected-users/', {
+        headers: { authorization: `Bearer ${token}` }
+      })
+    )
+    expect(authed.status).toBe(200)
+  })
+
+  it('serves the auth routes themselves through the same pipeline', async () => {
+    const server = buildServer()
+    const token = await loginToken('ada@example.com', 'ada-pass-123')
+    const me = await server(
+      new Request('https://example.test/auth/me/', {
+        headers: { authorization: `Bearer ${token}` }
+      })
+    )
+    expect(me.status).toBe(200)
+    const body = (await me.json()) as Record<string, unknown>
+    expect(body['email']).toBe('ada@example.com')
   })
 })
 

@@ -1,6 +1,15 @@
 import { detailResponse, jsonResponse, type RequestContext } from '@tango-ts/http'
-import type { Authentication, MaybePromise, Permission } from '@tango-ts/auth'
-import { AuthenticationFailed } from '@tango-ts/auth'
+import type {
+  Authentication,
+  MaybePromise,
+  PermissionCheck
+} from '@tango-ts/auth'
+import {
+  AuthenticationFailed,
+  checkObjectPermissions,
+  checkPermissions,
+  runAuthentication
+} from '@tango-ts/auth'
 import type { Fields, InferSelect, InferUpdate, Lookups } from '@tango-ts/core-types'
 import { DoesNotExist, Field } from '@tango-ts/orm'
 import type { Model, OrderingKey, QuerySet } from '@tango-ts/orm'
@@ -148,9 +157,7 @@ export interface ModelViewSetOptions<F extends Fields, Out> {
   }
   readonly authenticate?: (ctx: RequestContext) => Promise<AuthResult> | AuthResult
   readonly authentication?: readonly Authentication[]
-  readonly permissions?: readonly (Permission | ((
-    ctx: RequestContext
-  ) => Promise<boolean> | boolean))[]
+  readonly permissions?: readonly PermissionCheck[]
   readonly actions?: readonly ModelViewSetAction[]
   readonly openApi?: ModelViewSetOpenApiOverrides
 }
@@ -327,14 +334,15 @@ export class ModelViewSet<F extends Fields, Out> {
     ctx: RequestContext,
     handler: (ctx: RequestContext) => Promise<Response>
   ): Promise<Response> {
-    let user = await this.options.authenticate?.(ctx)
+    // Precedence: this viewset's authentication classes, then the legacy
+    // `authenticate` hook, then any user already on the context (set by
+    // project-level authentication in `defineServer`/`defineProject`).
+    let user: unknown
     try {
-      for (const authentication of this.options.authentication ?? []) {
-        user = await authentication.authenticate(ctx)
-        if (user !== undefined) {
-          break
-        }
-      }
+      user =
+        (await runAuthentication(ctx, this.options.authentication ?? [])) ??
+        (await this.options.authenticate?.(ctx)) ??
+        ctx.user
     } catch (err) {
       if (err instanceof AuthenticationFailed) {
         return detailResponse(err.message, 401)
@@ -342,21 +350,9 @@ export class ModelViewSet<F extends Fields, Out> {
       throw err
     }
     const authedCtx: RequestContext = { ...ctx, user }
-    for (const permission of this.options.permissions ?? []) {
-      const requiresAuthentication =
-        typeof permission === 'function'
-          ? false
-          : permission.requiresAuthentication === true
-      if (requiresAuthentication && authedCtx.user === undefined) {
-        return detailResponse('Authentication credentials were not provided.', 401)
-      }
-      const allowed =
-        typeof permission === 'function'
-          ? await permission(authedCtx)
-          : await permission.hasPermission(authedCtx)
-      if (!allowed) {
-        return detailResponse('Permission denied.', 403)
-      }
+    const denied = await checkPermissions(authedCtx, this.options.permissions ?? [])
+    if (denied !== undefined) {
+      return denied
     }
     return handler(authedCtx)
   }
@@ -384,16 +380,13 @@ export class ModelViewSet<F extends Fields, Out> {
     ctx: RequestContext,
     row: InferSelect<F>
   ): Promise<Response | undefined> {
-    for (const permission of this.options.permissions ?? []) {
-      if (typeof permission === 'function') {
-        continue
-      }
-      if (
-        permission.hasObjectPermission !== undefined &&
-        !(await permission.hasObjectPermission(ctx, row))
-      ) {
-        return detailResponse('Permission denied.', 403)
-      }
+    const denied = await checkObjectPermissions(
+      ctx,
+      this.options.permissions ?? [],
+      row
+    )
+    if (denied !== undefined) {
+      return denied
     }
     const objectPermission = this.options.objectPermission
     if (objectPermission !== undefined && !(await objectPermission(ctx, row))) {

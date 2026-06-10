@@ -1,5 +1,11 @@
 # @tango-ts/orm
 
+## 0.5.0
+
+### Patch Changes
+
+- @tango-ts/core-types@0.5.0
+
 ## 0.4.0
 
 ### Patch Changes

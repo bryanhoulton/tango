@@ -1,4 +1,4 @@
-import { AuthenticationFailed } from '@tango-ts/auth'
+import { apiView, IsAuthenticated } from '@tango-ts/auth'
 import {
   detailResponse,
   jsonResponse,
@@ -96,22 +96,12 @@ async function logout(ctx: RequestContext): Promise<Response> {
   return new Response(null, { status: 204 })
 }
 
-async function me(ctx: RequestContext): Promise<Response> {
-  // Plain routes do not run the viewset authentication pipeline, so this
-  // handler invokes the same Authentication class itself.
-  try {
-    const user = await authTokenAuthentication().authenticate(ctx)
-    if (user === undefined) {
-      return detailResponse('Authentication credentials were not provided.', 401)
-    }
-    return jsonResponse(user)
-  } catch (err) {
-    if (err instanceof AuthenticationFailed) {
-      return detailResponse(err.message, 401)
-    }
-    throw err
-  }
-}
+// `apiView` runs the standard authentication + permission pipeline for this
+// plain route; the handler just reflects the resolved user.
+const me = apiView(
+  { authentication: [authTokenAuthentication()], permissions: [IsAuthenticated] },
+  (ctx) => jsonResponse(ctx.user)
+)
 
 /**
  * The built-in auth endpoints:

@@ -29,10 +29,16 @@ JWT issuance — those are layers on top.
   time. Optional expiry (`expiresAt`) and `lastUsedAt` tracking (throttled to
   one write per minute per token).
 - `createUser` / `createSuperuser` / `authenticateUser` (timing-safe against
-  user enumeration).
+  user enumeration). `tango createsuperuser` (in `@tango-ts/cli`) wraps
+  `createSuperuser` for bootstrap.
 - `issueToken` / `revokeToken` / `verifyAuthToken`.
 - `authRoutes()`: `POST /login/` (`{ email, password }` → `{ token, user }`),
-  `POST /logout/` (revokes the presented token), `GET /me/`.
+  `POST /logout/` (revokes the presented token), `GET /me/` (an `apiView`
+  running the standard pipeline).
+- Plays with project-level auth: pass
+  `authentication: [authTokenAuthentication()]` to
+  `defineServer`/`defineProject` and `ctx.user` is set on every route and
+  viewset without per-route wiring.
 - Shipped migration `0001_initial` in `migrations/` (packaged with the npm
   tarball). FKs are declared with `dbConstraint: false` so the schema deploys
   on PlanetScale/Vitess; token verification re-fetches the user row, so

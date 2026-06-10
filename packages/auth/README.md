@@ -24,6 +24,15 @@ database lookups; those stay explicit and pluggable.
 - `Permission.hasObjectPermission?(ctx, obj)` — optional object-level check
   (DRF's `has_object_permission`), called by viewsets for detail actions after
   the row is fetched; denial is a 403.
+- The shared auth pipeline: `runAuthentication(ctx, classes)`,
+  `checkPermissions(ctx, permissions)`, `checkObjectPermissions(ctx,
+  permissions, obj)`. `ModelViewSet`, `apiView`, and project-level
+  authentication all dispatch through these, so 401/403 semantics cannot
+  drift between entry points.
+- `apiView(options, handler)` — DRF's `@api_view` for plain routes: wraps a
+  handler so it runs the same authentication + permission pipeline as a
+  viewset, with `ctx.user` populated (falling back to a user set by
+  project-level authentication).
 
 ## Design patterns that matter here
 
