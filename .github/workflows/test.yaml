@@ -53,6 +53,15 @@ jobs:
         with:
           node-version: 24
 
+      # The Django/DRF parity oracle tests shell out to `uv run` (see
+      # packages/migrations/test/django-parity.test.ts and
+      # packages/serializers/test/drf-parity.test.ts), mirroring publish.yaml.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@v6
+
       - run: yarn install --frozen-lockfile
 
       # Build first: typecheck covers the CLI templates, which resolve
