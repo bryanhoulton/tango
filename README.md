@@ -14,8 +14,8 @@ Web-standard `Request` / `Response` handlers, so the same app runs locally, in a
 container, or serverless on Vercel without changes.
 
 Tango is still early. The ORM, migrations, serializers, router, viewsets, auth
-primitives, OpenAPI generation, middleware, Node and Vercel adapters, and CLI
-scaffolding exist. Admin, caching, and more deployment adapters (Lambda,
+primitives, the admin, OpenAPI generation, middleware, Node and Vercel adapters,
+and CLI scaffolding exist. Caching and more deployment adapters (Lambda,
 Cloudflare Workers) are part of the direction, not the current quickstart
 surface.
 
@@ -204,6 +204,61 @@ export const project = defineProject({
 Each app owns its own migration directory. For now, generated scripts target the
 starter `core` app; additional apps should get their own migration scripts or CI
 steps.
+
+## Admin
+
+Tango ships a Django-style admin, split in half for serverless: `@tango-ts/admin`
+registers JSON endpoints on the project (model metadata, staff-gated auth, CRUD
+viewsets), and `@tango-ts/admin-ui` is a prebuilt React SPA served as static
+assets. Server code never imports the UI package, so the admin adds no React to
+the Vercel function bundle — that separation is enforced in CI by a bundle
+trace test.
+
+Register models in `src/project.ts`, the same pattern as `addOpenApiRoute`:
+
+```ts
+import { addAdminRoutes, adminModel } from '@tango-ts/admin'
+
+addAdminRoutes(project, {
+  models: [
+    adminModel(Post, {
+      listDisplay: ['id', 'title', 'published'],
+      searchFields: ['title'],
+      listFilters: ['published']
+    })
+  ]
+})
+```
+
+`adminModel(Post)` with no options also works: every field is shown, primary
+keys and auto-managed timestamps are read-only, and lists sort by primary key.
+Field names are typechecked against the model.
+
+The admin authenticates with the contrib-auth token model and only admits
+`isStaff` / `isSuperuser` users. Apply the contrib-auth migrations, then create
+the first account:
+
+```sh
+yarn tango migrate --app node_modules/@tango-ts/contrib-auth/dist/app.js
+yarn tango createsuperuser --email you@example.com
+```
+
+Serve the UI by copying the prebuilt assets into your static directory — on
+Vercel, make the build command:
+
+```sh
+cp -r node_modules/@tango-ts/admin-ui/dist public/admin
+```
+
+Static files win over the catch-all rewrite, so `/admin/` is served from the
+CDN while `/admin/api/*` is routed to the function. The SPA uses hash routing
+and relative asset URLs, so no extra rewrites are needed. Log in at `/admin/`.
+
+What you get: a sidebar of registered models, list views with search
+(`searchFields`), filters (`listFilters`), and server-side pagination,
+create/edit modals with widgets per column type and per-field validation
+errors straight from the serializer, foreign-key pickers that search the
+related model, and delete confirmations.
 
 ## Deployment
 

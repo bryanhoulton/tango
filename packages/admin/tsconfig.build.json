@@ -1,0 +1,20 @@
+{
+  "extends": "../../tsconfig.package.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "tsBuildInfoFile": "dist/.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts"],
+  "references": [
+    { "path": "../auth/tsconfig.build.json" },
+    { "path": "../contrib-auth/tsconfig.build.json" },
+    { "path": "../core-types/tsconfig.build.json" },
+    { "path": "../http/tsconfig.build.json" },
+    { "path": "../orm/tsconfig.build.json" },
+    { "path": "../router/tsconfig.build.json" },
+    { "path": "../serializers/tsconfig.build.json" },
+    { "path": "../server/tsconfig.build.json" },
+    { "path": "../views/tsconfig.build.json" }
+  ]
+}

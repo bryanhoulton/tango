@@ -14,7 +14,7 @@
     "apps/*"
   ],
   "scripts": {
-    "build": "tsc -b tsconfig.build.json",
+    "build": "tsc -b tsconfig.build.json && yarn workspace @tango-ts/admin-ui build",
     "clean": "rm -rf packages/*/dist",
     "changeset": "changeset",
     "version-packages": "changeset version && yarn install",
@@ -22,6 +22,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
+    "check:import-graph": "node scripts/check-import-graph.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:package": "yarn build && vitest run --config vitest.package.config.ts",
@@ -38,6 +39,7 @@
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
     "@types/node": "^20.8.10",
+    "@vercel/nft": "^1.10.2",
     "eslint": "^10.4.1",
     "husky": "^9.1.7",
     "lint-staged": "^17.0.7",

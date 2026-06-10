@@ -7,6 +7,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@tango-ts/adapters': new URL('./packages/adapters/src/index.ts', import.meta.url).pathname,
+      '@tango-ts/admin': new URL('./packages/admin/src/index.ts', import.meta.url).pathname,
       '@tango-ts/auth': new URL('./packages/auth/src/index.ts', import.meta.url).pathname,
       '@tango-ts/cli': new URL('./packages/cli/src/index.ts', import.meta.url).pathname,
       '@tango-ts/contrib-auth': new URL('./packages/contrib-auth/src/index.ts', import.meta.url).pathname,

@@ -3,3 +3,9 @@
 echo "→ lint (no-any gate) + typecheck"
 yarn lint-staged
 yarn typecheck
+
+# Serverless import-graph guard: server packages must never ship UI deps
+# (react/admin-ui) that would enter the Vercel function bundle. Fast manifest
+# check here; the full @vercel/nft bundle trace runs in CI.
+echo "→ import-graph guard"
+yarn check:import-graph

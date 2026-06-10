@@ -12,6 +12,7 @@
     { "path": "./packages/server/tsconfig.build.json" },
     { "path": "./packages/views/tsconfig.build.json" },
     { "path": "./packages/contrib-auth/tsconfig.build.json" },
+    { "path": "./packages/admin/tsconfig.build.json" },
     { "path": "./packages/openapi/tsconfig.build.json" },
     { "path": "./packages/cli/tsconfig.build.json" }
   ]

@@ -1,0 +1,49 @@
+# Serverless import-graph guard.
+#
+# A generated project's `api/index.ts` module graph IS the Vercel function
+# bundle, so anything that sneaks into it inflates cold starts. This workflow
+# enforces the invariant that UI code (react, react-dom, @tango-ts/admin-ui)
+# ships only as prebuilt static assets, never as server imports, at three
+# levels:
+#
+#   1. Source level  — eslint `no-restricted-imports` (part of `yarn lint`).
+#   2. Manifest level — scripts/check-import-graph.mjs scans every workspace
+#      package.json (and the project template) for forbidden shipped deps.
+#   3. Bundle level  — the @vercel/nft trace test runs the same tracer Vercel
+#      uses on the built entrypoints and fails on forbidden files or a bundle
+#      over the size budget.
+name: Import Graph Guard
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - run: yarn install --frozen-lockfile
+
+      - name: Lint (includes no-restricted-imports guard)
+        run: yarn lint
+
+      - name: Manifest guard (no UI deps in server packages)
+        run: yarn check:import-graph
+
+      - name: Build packages
+        run: yarn build
+
+      - name: Bundle trace guard (@vercel/nft, forbidden files + size budget)
+        run: yarn vitest run --config vitest.package.config.ts packages/adapters/test/vercel-bundle.package.ts
