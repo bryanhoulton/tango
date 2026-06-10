@@ -2,7 +2,8 @@ import type {
   Fields,
   InferInsert,
   InferSelect,
-  Prettify
+  Prettify,
+  RelatedSelects
 } from '@tango-ts/core-types'
 import { Field } from '@tango-ts/orm'
 
@@ -33,10 +34,67 @@ export type SerializerInput<
   ReadOnlyNames extends readonly Selected<F, Names>[]
 > = InferInsert<InputFields<F, Names, ReadOnlyNames>>
 
+// --- Nested serializers ------------------------------------------------------
+// DRF's `author = AuthorSerializer(read_only=True)`: output-only nesting keyed
+// by relation name. Input never accepts nested keys — they are silently
+// ignored, matching the DRF oracle (test/drf-parity.test.ts).
+
+/**
+ * The structural shape a nested serializer must satisfy: anything that can
+ * serialize the related row (a `modelSerializer` for the related model).
+ */
+export interface NestedSerializerLike<Row, Out = unknown> {
+  serialize(row: Row): Out
+  readonly nested?: NestedSerializerMap
+}
+
+/** A relation-name -> nested-serializer map (untyped form used in contracts). */
+export type NestedSerializerMap = Readonly<
+  Record<string, NestedSerializerLike<never> | undefined>
+>
+
+type NoNested = Record<never, never>
+
+/**
+ * Validates a `nested` map against a model: keys must be the model's relation
+ * names (`authorId` -> `author`) and values must serialize that relation's row
+ * shape. Unknown keys collapse to `never`, making them a compile error.
+ */
+export type NestedSerializersOption<F extends Fields, Nested> = {
+  readonly [K in keyof Nested]: K extends keyof RelatedSelects<F>
+    ? NestedSerializerLike<RelatedSelects<F>[K]>
+    : never
+}
+
+type NestedRow<N> = N extends NestedSerializerLike<infer Row, unknown>
+  ? Row
+  : never
+
+type NestedOutput<N> = N extends NestedSerializerLike<never, infer Out>
+  ? Out
+  : never
+
+/**
+ * The row shape `serialize` requires: the model's own columns plus, for each
+ * nested serializer, the related row it serializes (what `selectRelated`
+ * returns — including deeper relations when nested serializers nest again).
+ */
+export type SerializerRow<
+  F extends Fields,
+  Nested extends NestedSerializerMap = NoNested
+> = InferSelect<F> & {
+  readonly [K in keyof Nested & string]: NestedRow<Nested[K]>
+}
+
 export type SerializerOutput<
   F extends Fields,
-  Names extends readonly FieldName<F>[]
-> = Prettify<Pick<InferSelect<F>, Selected<F, Names>>>
+  Names extends readonly FieldName<F>[],
+  Nested extends NestedSerializerMap = NoNested
+> = Prettify<
+  Pick<InferSelect<F>, Selected<F, Names>> & {
+    [K in keyof Nested & string]: NestedOutput<Nested[K]>
+  }
+>
 
 export interface SerializerModel<F extends Fields> {
   readonly fields: F
@@ -48,21 +106,26 @@ export interface SerializerModel<F extends Fields> {
 export interface ModelSerializerOptions<
   F extends Fields,
   Names extends readonly FieldName<F>[],
-  ReadOnlyNames extends readonly Names[number][] = readonly []
+  ReadOnlyNames extends readonly Names[number][] = readonly [],
+  Nested extends NestedSerializerMap = NoNested
 > {
   readonly fields: Names
   readonly readOnlyFields?: ReadOnlyNames
+  /** Read-only nested output keyed by relation name (DRF nested serializers). */
+  readonly nested?: Nested & NestedSerializersOption<F, Nested>
 }
 
 export interface ModelSerializerDefinition<
   F extends Fields,
   Names extends readonly FieldName<F>[],
-  ReadOnlyNames extends readonly Names[number][]
+  ReadOnlyNames extends readonly Names[number][],
+  Nested extends NestedSerializerMap = NoNested
 > {
   readonly model: SerializerModel<F>
   readonly fields: Names
   readonly readOnlyFields: ReadOnlyNames
-  serialize(row: InferSelect<F>): SerializerOutput<F, Names>
+  readonly nested: Nested
+  serialize(row: SerializerRow<F, Nested>): SerializerOutput<F, Names, Nested>
   forInput(
     input: SerializerInput<F, Names, ReadOnlyNames>
   ): ModelSerializerInstance<F, Names, ReadOnlyNames>
@@ -197,7 +260,8 @@ export class ModelSerializerInstance<
     private readonly names: Names,
     private readonly readOnlyNames: ReadOnlyNames,
     private readonly input: unknown,
-    private readonly options: SerializerInstanceOptions = {}
+    private readonly options: SerializerInstanceOptions = {},
+    private readonly nestedNames: readonly string[] = []
   ) {}
 
   get errors(): ValidationErrors {
@@ -230,6 +294,11 @@ export class ModelSerializerInstance<
     }
 
     for (const key of Object.keys(this.input)) {
+      // Read-only nested keys are silently ignored, matching the DRF oracle
+      // for `read_only=True` nested serializer fields (drf-parity.test.ts).
+      if (this.nestedNames.includes(key)) {
+        continue
+      }
       if (!allowed.has(key)) {
         errors[key] = ['Unknown field.']
       } else if (this.readOnlyNames.includes(key)) {
@@ -275,24 +344,40 @@ export class ModelSerializerInstance<
 export function modelSerializer<
   F extends Fields,
   Names extends readonly FieldName<F>[],
-  ReadOnlyNames extends readonly Names[number][] = readonly []
+  ReadOnlyNames extends readonly Names[number][] = readonly [],
+  Nested extends NestedSerializerMap = NoNested
 >(
   model: SerializerModel<F>,
-  options: ModelSerializerOptions<F, Names, ReadOnlyNames>
-): ModelSerializerDefinition<F, Names, ReadOnlyNames> {
+  options: ModelSerializerOptions<F, Names, ReadOnlyNames, Nested>
+): ModelSerializerDefinition<F, Names, ReadOnlyNames, Nested> {
   const readOnlyFields = (options.readOnlyFields ?? []) as ReadOnlyNames
+  const nested = (options.nested ?? {}) as Nested
+  const nestedNames = Object.keys(nested)
 
   return {
     model,
     fields: options.fields,
     readOnlyFields,
+    nested,
 
-    serialize(row: InferSelect<F>): SerializerOutput<F, Names> {
+    serialize(
+      row: SerializerRow<F, Nested>
+    ): SerializerOutput<F, Names, Nested> {
       const output: Record<string, unknown> = {}
       for (const name of options.fields) {
         output[name] = row[name]
       }
-      return output as SerializerOutput<F, Names>
+      for (const name of nestedNames) {
+        const child = nested[name]
+        const related = (row as Record<string, unknown>)[name]
+        // A missing relation (nullable FK) renders as null, like DRF's
+        // nested serializer of a None instance.
+        output[name] =
+          child === undefined || related === null || related === undefined
+            ? null
+            : child.serialize(related as never)
+      }
+      return output as SerializerOutput<F, Names, Nested>
     },
 
     forInput(
@@ -302,7 +387,9 @@ export function modelSerializer<
         model,
         options.fields,
         readOnlyFields,
-        input
+        input,
+        {},
+        nestedNames
       )
     },
 
@@ -315,7 +402,8 @@ export function modelSerializer<
         options.fields,
         readOnlyFields,
         input,
-        instanceOptions
+        instanceOptions,
+        nestedNames
       )
     }
   }

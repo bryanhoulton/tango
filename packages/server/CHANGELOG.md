@@ -1,5 +1,17 @@
 # @tango-ts/server
 
+## 0.8.0
+
+### Minor Changes
+
+- Internal `@tango-ts/*` dependencies are now `peerDependencies` instead of `dependencies`. Package managers therefore never install nested copies of sibling packages, eliminating the version-skew failures (diverging TS types, duplicate module instances) that previously required `resolutions` workarounds on every version bump.
+
+  Migration: projects must list every `@tango-ts/*` package they transitively use in their own `package.json` — in particular add `@tango-ts/auth` and `@tango-ts/core-types` (peers of server/views/orm), and `@tango-ts/contrib-auth` + `@tango-ts/migrations` if you use the CLI. The scaffold template includes the full set. Existing `resolutions` entries for `@tango-ts/*` can be removed.
+
+### Patch Changes
+
+- Exempt the internal function dispatch endpoint (`/_tango/functions/*`) from project-level authentication. The dispatch handler authenticates with an HMAC signature, so authentication classes that reject credential-less requests could 401 the http transport's self-invocation before the signature was ever verified, breaking `invoke()` and `defer()` on projects with project-level auth. Unsigned callers still receive a plain 404.
+
 ## 0.7.0
 
 ### Minor Changes

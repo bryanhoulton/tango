@@ -3,6 +3,7 @@ import type { Router } from '@tango-ts/router'
 import type { TangoProject } from '@tango-ts/server'
 import type {
   ModelViewSetRouteMetadata,
+  NestedSerializerMetadata,
   OpenApiOperationOverride,
   OpenApiParameterObject,
   OpenApiRequestBodyObject,
@@ -119,6 +120,26 @@ function isRequired(field: Field): boolean {
   return !field.spec.nullable && !field.spec.hasDefault
 }
 
+/**
+ * The object schema of a read-only nested serializer's output, recursing into
+ * deeper nesting. Always `readOnly`: nested serializers never accept input.
+ */
+function nestedObjectSchema(meta: NestedSerializerMetadata): SchemaObject {
+  const readOnlyFields = new Set<string>(meta.readOnlyFields)
+  const properties: Record<string, SchemaObject> = {}
+  for (const name of meta.fields) {
+    const field = meta.modelFields[name] as Field | undefined
+    if (field === undefined) {
+      continue
+    }
+    properties[name] = fieldSchema(field, readOnlyFields.has(name))
+  }
+  for (const [name, child] of Object.entries(meta.nested)) {
+    properties[name] = nestedObjectSchema(child)
+  }
+  return { type: 'object', readOnly: true, properties }
+}
+
 function buildSchema(
   meta: ModelViewSetRouteMetadata<Record<string, never>>,
   mode: 'input' | 'output'
@@ -138,6 +159,12 @@ function buildSchema(
     properties[name] = fieldSchema(field, mode === 'output' && readOnlyFields.has(name))
     if (!readOnlyFields.has(name) && isRequired(field)) {
       required.push(name)
+    }
+  }
+
+  if (mode === 'output') {
+    for (const [name, child] of Object.entries(meta.serializer.nested)) {
+      properties[name] = nestedObjectSchema(child)
     }
   }
 

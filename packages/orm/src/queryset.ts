@@ -94,10 +94,17 @@ function compileLookup(
   eb: Eb,
   key: string,
   value: unknown,
-  relations: readonly RelationSpec[]
+  relations: readonly RelationSpec[],
+  // When the query has joins, unqualified local columns are ambiguous if the
+  // joined table shares a column name (e.g. `id`), so qualify with the table.
+  qualifyTable?: string
 ): Expression<SqlBool> {
   const { column, operator } = parseLookup(key)
-  const resolved = resolveColumn(column, relations).column
+  const local = resolveColumn(column, relations).column
+  const resolved =
+    qualifyTable !== undefined && !local.includes('.')
+      ? `${qualifyTable}.${local}`
+      : local
   switch (operator) {
     case 'in':
       return eb(resolved, 'in', value as readonly unknown[])
@@ -348,7 +355,8 @@ export class QuerySet<Row, Lk, Selectable extends string = never>
   private buildBase(db: ActiveConnection) {
     let query = db.selectFrom(this.tableName)
 
-    for (const join of this.relationsToJoin()) {
+    const joins = this.relationsToJoin()
+    for (const join of joins) {
       const relation = join.relation
       const parent = join.parent.length === 0 ? this.tableName : join.parent
       query = query.leftJoin(
@@ -358,10 +366,11 @@ export class QuerySet<Row, Lk, Selectable extends string = never>
       )
     }
 
+    const qualifyTable = joins.length > 0 ? this.tableName : undefined
     for (const clause of this.state.clauses) {
       query = query.where((eb) => {
         const predicates = Object.entries(clause.lookups).map(([key, value]) =>
-          compileLookup(eb, key, value, this.relations)
+          compileLookup(eb, key, value, this.relations, qualifyTable)
         )
         const combined = eb.and(predicates)
         return clause.negate ? eb.not(combined) : combined
@@ -387,7 +396,9 @@ export class QuerySet<Row, Lk, Selectable extends string = never>
     for (const key of this.state.ordering) {
       const descending = key.startsWith('-')
       const column = descending ? key.slice(1) : key
-      query = query.orderBy(sql.ref(column), descending ? 'desc' : 'asc')
+      const qualified =
+        hasJoins && !column.includes('.') ? `${this.tableName}.${column}` : column
+      query = query.orderBy(sql.ref(qualified), descending ? 'desc' : 'asc')
     }
 
     if (this.state.limitCount !== undefined) {

@@ -1,5 +1,18 @@
 # @tango-ts/admin-ui
 
+## 0.8.0
+
+### Minor Changes
+
+- Admin functions: `addAdminRoutes` now exposes staff-runnable functions (every
+  function owned by the project's apps by default, or an explicit `functions`
+  list). Each function gets a `POST /functions/:app/:name/` endpoint guarded by
+  the admin's authentication/permission classes, and the UI lists them in a new
+  Functions sidebar section with a run screen (`#/f/<app>/<name>`) that submits a
+  JSON payload and shows the result. The sidebar now also groups models by their
+  owning app (Django-style admin index), and the document title reflects the
+  project's admin site title.
+
 ## 0.7.0
 
 ### Patch Changes

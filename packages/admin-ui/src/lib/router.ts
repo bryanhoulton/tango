@@ -9,12 +9,14 @@ import { useEffect, useState } from 'react'
  * - `#/m/<model>`        → list view
  * - `#/m/<model>/new`    → create form
  * - `#/m/<model>/<id>`   → edit form
+ * - `#/f/<app>/<name>`   → function run screen
  */
 export type AdminRoute =
   | { readonly kind: 'home' }
   | { readonly kind: 'list'; readonly model: string }
   | { readonly kind: 'create'; readonly model: string }
   | { readonly kind: 'edit'; readonly model: string; readonly id: string }
+  | { readonly kind: 'function'; readonly app: string; readonly name: string }
 
 function currentHash(): string {
   return window.location.hash.slice(1) || '/'
@@ -22,6 +24,13 @@ function currentHash(): string {
 
 export function parseRoute(hash: string): AdminRoute {
   const parts = hash.split('/').filter((part) => part.length > 0)
+  if (parts[0] === 'f' && parts[1] !== undefined && parts[2] !== undefined) {
+    return {
+      kind: 'function',
+      app: decodeURIComponent(parts[1]),
+      name: decodeURIComponent(parts[2])
+    }
+  }
   if (parts[0] !== 'm' || parts[1] === undefined) {
     return { kind: 'home' }
   }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { AuthenticationFailed } from '@tango-ts/auth'
 import {
   defineFunction,
   FUNCTIONS_PATH_PREFIX,
@@ -206,6 +207,79 @@ describe('defineServer', () => {
     expect(executed).toEqual([7])
 
     // Unsigned callers cannot tell the endpoint apart from a missing route.
+    const unsigned = await project(
+      new Request(`https://example.test${functionDispatchPath('core', 'work')}`, {
+        method: 'POST',
+        body
+      })
+    )
+    expect(unsigned.status).toBe(404)
+    expect(await unsigned.json()).toEqual({ detail: 'Not found.' })
+  })
+
+  it('project-level authentication never blocks the signed dispatch endpoint', async () => {
+    const executed: number[] = []
+    const work = defineFunction({
+      name: 'work',
+      handler: (payload: { value: number }) => {
+        executed.push(payload.value)
+        return Promise.resolve({ ok: true })
+      }
+    })
+    const coreApp = defineApp({ name: 'core', functions: [work] })
+    const project = defineProject({
+      name: 'shop',
+      database: COMPILE_ONLY,
+      apps: [coreApp],
+      // The strictest legal Authentication: rejects every request that lacks
+      // credentials. Dispatch self-invocations carry only the HMAC headers,
+      // so without the exemption this 401s before signature verification.
+      authentication: [
+        {
+          authenticate: (ctx) => {
+            if (ctx.request.headers.get('authorization') === null) {
+              throw new AuthenticationFailed('Credentials required.')
+            }
+            return undefined
+          }
+        }
+      ],
+      functions: {
+        transport: 'http',
+        secret: 'shared-secret',
+        url: 'https://example.test'
+      }
+    })
+
+    // Project auth still guards ordinary routes.
+    const blocked = await project(new Request('https://example.test/missing/'))
+    expect(blocked.status).toBe(401)
+
+    const body = JSON.stringify({ payload: { value: 7 } })
+    const timestamp = String(Math.floor(Date.now() / 1000))
+    const signed = await project(
+      new Request(`https://example.test${functionDispatchPath('core', 'work')}`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          [TIMESTAMP_HEADER]: timestamp,
+          [SIGNATURE_HEADER]: signFunctionRequest({
+            secret: 'shared-secret',
+            timestamp,
+            appName: 'core',
+            functionName: 'work',
+            body
+          })
+        },
+        body
+      })
+    )
+    expect(signed.status).toBe(200)
+    expect(await signed.json()).toEqual({ result: { ok: true } })
+    expect(executed).toEqual([7])
+
+    // Bypassing project auth must not weaken the endpoint: unsigned callers
+    // still see a plain 404, identical to a missing route.
     const unsigned = await project(
       new Request(`https://example.test${functionDispatchPath('core', 'work')}`, {
         method: 'POST',

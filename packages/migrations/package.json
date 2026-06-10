@@ -1,6 +1,6 @@
 {
   "name": "@tango-ts/migrations",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Tango migrations: schema snapshots and the autodetector that diffs models into typed operations.",
   "license": "MIT",
   "type": "module",
@@ -22,8 +22,10 @@
     "access": "public"
   },
   "dependencies": {
-    "@tango-ts/core-types": "*",
-    "@tango-ts/orm": "*",
     "kysely": "^0.29.2"
+  },
+  "peerDependencies": {
+    "@tango-ts/core-types": "*",
+    "@tango-ts/orm": "*"
   }
 }

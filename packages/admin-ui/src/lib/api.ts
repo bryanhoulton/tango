@@ -119,6 +119,7 @@ export async function logout(): Promise<void> {
 
 export type {
   AdminFieldMeta,
+  AdminFunctionMeta,
   AdminMetaDocument,
   AdminModelMeta,
   AdminRelationMeta

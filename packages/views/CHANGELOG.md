@@ -1,5 +1,20 @@
 # @tango-ts/views
 
+## 0.8.0
+
+### Minor Changes
+
+- Custom viewset actions get full DRF `@action` semantics. Detail action handlers
+  now receive `(ctx, row)` with the row resolved through the scoped queryset
+  (missing or out-of-scope rows 404) and past the object-permission pass. Actions
+  may declare per-action `authentication` and `permissions` that replace the
+  viewset-level classes, and `detail` defaults to `false`. Collection action
+  routes now register before the `/:id/` routes so `GET /users/export/` is never
+  captured as a retrieve.
+- Internal `@tango-ts/*` dependencies are now `peerDependencies` instead of `dependencies`. Package managers therefore never install nested copies of sibling packages, eliminating the version-skew failures (diverging TS types, duplicate module instances) that previously required `resolutions` workarounds on every version bump.
+
+  Migration: projects must list every `@tango-ts/*` package they transitively use in their own `package.json` — in particular add `@tango-ts/auth` and `@tango-ts/core-types` (peers of server/views/orm), and `@tango-ts/contrib-auth` + `@tango-ts/migrations` if you use the CLI. The scaffold template includes the full set. Existing `resolutions` entries for `@tango-ts/*` can be removed.
+
 ## 0.7.0
 
 ### Patch Changes

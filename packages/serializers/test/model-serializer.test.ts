@@ -160,3 +160,136 @@ describe('modelSerializer', () => {
     })
   })
 })
+
+describe('nested serializers', () => {
+  const Author = model('authors', {
+    id: f.int().primaryKey().autoIncrement(),
+    name: f.varchar(255),
+    secret: f.varchar(255)
+  })
+
+  const Post = model('posts', {
+    id: f.int().primaryKey().autoIncrement(),
+    title: f.varchar(255),
+    authorId: f.foreignKey(() => Author, 'id')
+  })
+
+  const AuthorSerializer = modelSerializer(Author, {
+    fields: ['id', 'name'] as const,
+    readOnlyFields: ['id'] as const
+  })
+
+  const PostSerializer = modelSerializer(Post, {
+    fields: ['id', 'title', 'authorId'] as const,
+    readOnlyFields: ['id'] as const,
+    nested: { author: AuthorSerializer }
+  })
+
+  it('serializes nested relations through the nested serializer', () => {
+    const output = PostSerializer.serialize({
+      id: 1,
+      title: 'Hi',
+      authorId: 2,
+      author: { id: 2, name: 'Ada', secret: 'hidden' }
+    })
+
+    // Only the nested serializer's configured fields appear.
+    expect(output).toEqual({
+      id: 1,
+      title: 'Hi',
+      authorId: 2,
+      author: { id: 2, name: 'Ada' }
+    })
+  })
+
+  it('serializes a missing relation as null', () => {
+    const row = {
+      id: 1,
+      title: 'Hi',
+      authorId: 2,
+      author: null
+    } as unknown as Parameters<typeof PostSerializer.serialize>[0]
+
+    expect(PostSerializer.serialize(row)).toEqual({
+      id: 1,
+      title: 'Hi',
+      authorId: 2,
+      author: null
+    })
+  })
+
+  it('silently ignores read-only nested keys in input (DRF parity)', () => {
+    const serializer = PostSerializer.forUnknownInput({
+      title: 'Hi',
+      authorId: 2,
+      author: { name: 'Ada' }
+    })
+
+    expect(serializer.isValid()).toBe(true)
+    expect(serializer.errors).toEqual({})
+    expect(serializer.validatedData).toEqual({ title: 'Hi', authorId: 2 })
+  })
+
+  it('nested input does not satisfy required writable fields', () => {
+    const serializer = PostSerializer.forUnknownInput({
+      author: { name: 'Ada' }
+    })
+
+    expect(serializer.isValid()).toBe(false)
+    expect(serializer.errors).toEqual({
+      title: ['This field is required.'],
+      authorId: ['This field is required.']
+    })
+  })
+
+  it('supports multi-level nesting', () => {
+    const Publisher = model('publishers', {
+      id: f.int().primaryKey().autoIncrement(),
+      name: f.varchar(255)
+    })
+    const Book = model('books', {
+      id: f.int().primaryKey().autoIncrement(),
+      title: f.varchar(255),
+      publisherId: f.foreignKey(() => Publisher, 'id')
+    })
+    const Review = model('reviews', {
+      id: f.int().primaryKey().autoIncrement(),
+      stars: f.int(),
+      bookId: f.foreignKey(() => Book, 'id')
+    })
+
+    const PublisherSerializer = modelSerializer(Publisher, {
+      fields: ['id', 'name'] as const
+    })
+    const BookSerializer = modelSerializer(Book, {
+      fields: ['id', 'title'] as const,
+      nested: { publisher: PublisherSerializer }
+    })
+    const ReviewSerializer = modelSerializer(Review, {
+      fields: ['id', 'stars'] as const,
+      nested: { book: BookSerializer }
+    })
+
+    expect(
+      ReviewSerializer.serialize({
+        id: 1,
+        stars: 5,
+        bookId: 2,
+        book: {
+          id: 2,
+          title: 'Dune',
+          publisherId: 3,
+          publisher: { id: 3, name: 'Chilton' }
+        }
+      })
+    ).toEqual({
+      id: 1,
+      stars: 5,
+      book: {
+        id: 2,
+        title: 'Dune',
+        publisher: { id: 3, name: 'Chilton' }
+      }
+    })
+  })
+})

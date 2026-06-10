@@ -34,6 +34,29 @@ const EventSerializer = modelSerializer(Event, {
   readOnlyFields: ['id'] as const
 })
 
+const Author = model('serializer_authors', {
+  id: f.int().primaryKey().autoIncrement(),
+  name: f.varchar(255),
+  email: f.varchar(255)
+})
+
+const Post = model('serializer_posts', {
+  id: f.int().primaryKey().autoIncrement(),
+  title: f.varchar(255),
+  authorId: f.foreignKey(() => Author, 'id')
+})
+
+const AuthorSerializer = modelSerializer(Author, {
+  fields: ['id', 'name'] as const,
+  readOnlyFields: ['id'] as const
+})
+
+const PostSerializer = modelSerializer(Post, {
+  fields: ['id', 'title', 'authorId'] as const,
+  readOnlyFields: ['id'] as const,
+  nested: { author: AuthorSerializer }
+})
+
 let db: Kysely<LooseDatabase>
 
 beforeAll(async () => {
@@ -44,6 +67,8 @@ beforeAll(async () => {
     password: process.env.TANGO_DB_PASSWORD ?? 'tango',
     database: process.env.TANGO_DB_NAME ?? 'tango_test'
   })
+  await sql`drop table if exists serializer_posts`.execute(db)
+  await sql`drop table if exists serializer_authors`.execute(db)
   await sql`drop table if exists serializer_users`.execute(db)
   await sql`drop table if exists serializer_events`.execute(db)
   await sql`
@@ -61,10 +86,27 @@ beforeAll(async () => {
       day date not null
     )
   `.execute(db)
+  await sql`
+    create table serializer_authors (
+      id int primary key auto_increment,
+      name varchar(255) not null,
+      email varchar(255) not null
+    )
+  `.execute(db)
+  await sql`
+    create table serializer_posts (
+      id int primary key auto_increment,
+      title varchar(255) not null,
+      authorId int not null,
+      foreign key (authorId) references serializer_authors(id)
+    )
+  `.execute(db)
 })
 
 afterAll(async () => {
   if (db !== undefined) {
+    await sql`drop table if exists serializer_posts`.execute(db)
+    await sql`drop table if exists serializer_authors`.execute(db)
     await sql`drop table if exists serializer_users`.execute(db)
     await sql`drop table if exists serializer_events`.execute(db)
     await db.destroy()
@@ -112,6 +154,33 @@ describe('ModelSerializer.save against a real ORM connection', () => {
       expect(event.day.getFullYear()).toBe(2026)
       expect(event.day.getMonth()).toBe(5)
       expect(event.day.getDate()).toBe(9)
+    })
+  })
+})
+
+describe('nested serialization against a real ORM connection', () => {
+  it('serializes selectRelated rows through the nested serializer', async () => {
+    await withConnection(db, async () => {
+      const ada = await Author.objects.create({
+        name: 'Ada',
+        email: 'ada@example.com'
+      })
+      const created = await PostSerializer.forUnknownInput({
+        title: 'Analytical Engine',
+        authorId: ada.id
+      }).save()
+
+      const row = await Post.objects
+        .selectRelated('author')
+        .get({ id: created.id })
+
+      expect(PostSerializer.serialize(row)).toEqual({
+        id: created.id,
+        title: 'Analytical Engine',
+        authorId: ada.id,
+        // Only the nested serializer's fields: email stays internal.
+        author: { id: ada.id, name: 'Ada' }
+      })
     })
   })
 })

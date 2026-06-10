@@ -1,6 +1,10 @@
 import { Field, type ColumnType } from '@tango-ts/orm'
 
-import type { AdminModelDefinition, AdminPagination } from './config.js'
+import type {
+  AdminFunctionDefinition,
+  AdminModelDefinition,
+  AdminPagination
+} from './config.js'
 
 /**
  * The `/meta/` document: everything the generic admin SPA needs to render
@@ -18,6 +22,19 @@ export interface AdminMetaDocument {
     readonly mePath: string
   }
   readonly models: readonly AdminModelMeta[]
+  readonly functions: readonly AdminFunctionMeta[]
+}
+
+/** A staff-runnable function — the UI lists these in a Functions section. */
+export interface AdminFunctionMeta {
+  /** Function name, unique within its app. */
+  readonly name: string
+  /** Owning app name; with `name`, identifies the function and its URL. */
+  readonly app: string
+  readonly label: string
+  readonly appLabel: string
+  /** `POST` a `{ payload }` body here to run the function. */
+  readonly apiPath: string
 }
 
 export interface AdminModelMeta {
@@ -25,6 +42,8 @@ export interface AdminModelMeta {
   readonly name: string
   readonly label: string
   readonly singularLabel: string
+  /** Humanized app label — the UI groups sidebar entries by it. */
+  readonly app?: string
   readonly apiPath: string
   readonly pk: string
   readonly fields: readonly AdminFieldMeta[]
@@ -148,6 +167,7 @@ export interface AdminMetaOptions {
   readonly title: string
   readonly basePath: string
   readonly pagination: AdminPagination
+  readonly functions?: readonly AdminFunctionDefinition[]
 }
 
 export function buildAdminMeta(
@@ -177,6 +197,7 @@ export function buildAdminMeta(
         name: definition.name,
         label: definition.label ?? labels.plural,
         singularLabel: definition.label ?? labels.singular,
+        ...(definition.app === undefined ? {} : { app: humanize(definition.app) }),
         apiPath: `${base}/${definition.name}/`,
         pk,
         fields: definition.fieldNames.map((name) =>
@@ -188,6 +209,13 @@ export function buildAdminMeta(
         ordering: definition.ordering.length > 0 ? definition.ordering : [pk],
         pagination: options.pagination
       }
-    })
+    }),
+    functions: (options.functions ?? []).map(({ app, fn }) => ({
+      name: fn.name,
+      app,
+      label: humanize(fn.name),
+      appLabel: humanize(app),
+      apiPath: `${base}/functions/${app}/${fn.name}/`
+    }))
   }
 }

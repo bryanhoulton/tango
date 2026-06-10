@@ -1,7 +1,8 @@
 """DRF validation oracle for Tango serializer parity tests.
 
-Reads JSON payload from stdin and prints DRF's error envelope for a simple serializer
-shape matching the Tango test model.
+Reads a JSON request `{"serializer": <name>, "payload": <data>}` from stdin and
+prints DRF's verdict for the matching serializer shape: validity, the error
+envelope, and the validated data.
 """
 
 import json
@@ -27,6 +28,22 @@ class UserSerializer(serializers.Serializer):
     name = serializers.CharField(required=True)
 
 
+class AuthorSerializer(serializers.Serializer):
+    name = serializers.CharField(required=True)
+
+
+class PostSerializer(serializers.Serializer):
+    title = serializers.CharField(required=True)
+    authorId = serializers.IntegerField(required=True)
+    author = AuthorSerializer(read_only=True)
+
+
+SERIALIZERS = {
+    "user": UserSerializer,
+    "post": PostSerializer,
+}
+
+
 def normalize(value):
     if isinstance(value, list):
         return [str(item) for item in value]
@@ -35,7 +52,14 @@ def normalize(value):
     return str(value)
 
 
-payload = json.load(sys.stdin)
-serializer = UserSerializer(data=payload)
-serializer.is_valid()
-json.dump(normalize(serializer.errors), sys.stdout)
+request = json.load(sys.stdin)
+serializer = SERIALIZERS[request["serializer"]](data=request["payload"])
+valid = serializer.is_valid()
+json.dump(
+    {
+        "valid": valid,
+        "errors": normalize(serializer.errors),
+        "validatedData": dict(serializer.validated_data) if valid else None,
+    },
+    sys.stdout,
+)

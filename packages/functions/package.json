@@ -1,6 +1,6 @@
 {
   "name": "@tango-ts/functions",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Internal serverless functions for Tango apps: defined per app, invoked from Tango logic, never part of the public API.",
   "license": "MIT",
   "type": "module",
@@ -22,8 +22,10 @@
     "access": "public"
   },
   "dependencies": {
-    "@tango-ts/http": "*",
-    "@tango-ts/orm": "*",
     "kysely": "^0.29.2"
+  },
+  "peerDependencies": {
+    "@tango-ts/http": "*",
+    "@tango-ts/orm": "*"
   }
 }

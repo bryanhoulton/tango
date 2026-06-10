@@ -23,13 +23,40 @@ const UserSerializer = modelSerializer(User, {
   readOnlyFields: ['id'] as const
 })
 
-function drfErrors(payload: unknown): ValidationErrors {
+const Author = model('authors', {
+  id: f.int().primaryKey().autoIncrement(),
+  name: f.varchar(255)
+})
+
+const Post = model('posts', {
+  id: f.int().primaryKey().autoIncrement(),
+  title: f.varchar(255),
+  authorId: f.foreignKey(() => Author, 'id')
+})
+
+const AuthorSerializer = modelSerializer(Author, {
+  fields: ['name'] as const
+})
+
+// Mirrors the oracle's PostSerializer: `author = AuthorSerializer(read_only=True)`.
+const PostSerializer = modelSerializer(Post, {
+  fields: ['title', 'authorId'] as const,
+  nested: { author: AuthorSerializer }
+})
+
+interface DrfVerdict {
+  readonly valid: boolean
+  readonly errors: ValidationErrors
+  readonly validatedData: Record<string, unknown> | null
+}
+
+function drfVerdict(serializer: string, payload: unknown): DrfVerdict {
   const stdout = execFileSync(
     'uv',
     ['run', '--with', 'django==4.2.4', '--with', 'djangorestframework==3.15.2', 'python', SCRIPT],
-    { input: JSON.stringify(payload), encoding: 'utf8' }
+    { input: JSON.stringify({ serializer, payload }), encoding: 'utf8' }
   )
-  return JSON.parse(stdout) as ValidationErrors
+  return JSON.parse(stdout) as DrfVerdict
 }
 
 // The first oracle invocation may resolve and install Django/DRF via uv on a
@@ -39,7 +66,30 @@ describe('ModelSerializer validation parity with DRF', { timeout: 120_000 }, () 
     const payload = { email: 'ada@example.com' }
     const serializer = UserSerializer.forUnknownInput(payload)
 
+    const oracle = drfVerdict('user', payload)
+    expect(oracle.valid).toBe(false)
     expect(serializer.isValid()).toBe(false)
-    expect(serializer.errors).toEqual(drfErrors(payload))
+    expect(serializer.errors).toEqual(oracle.errors)
+  })
+
+  it('matches DRF: a read-only nested key in input is silently ignored', () => {
+    const payload = { title: 'Hi', authorId: 1, author: { name: 'Ada' } }
+    const serializer = PostSerializer.forUnknownInput(payload)
+
+    const oracle = drfVerdict('post', payload)
+    expect(oracle.valid).toBe(true)
+    expect(serializer.isValid()).toBe(true)
+    expect(serializer.errors).toEqual(oracle.errors)
+    expect(serializer.validatedData).toEqual(oracle.validatedData)
+  })
+
+  it('matches DRF: nested input does not satisfy required writable fields', () => {
+    const payload = { author: { name: 'Ada' } }
+    const serializer = PostSerializer.forUnknownInput(payload)
+
+    const oracle = drfVerdict('post', payload)
+    expect(oracle.valid).toBe(false)
+    expect(serializer.isValid()).toBe(false)
+    expect(serializer.errors).toEqual(oracle.errors)
   })
 })

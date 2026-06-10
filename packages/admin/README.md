@@ -31,6 +31,18 @@ addAdminRoutes(project, {
 })
 ```
 
+The UI sidebar groups models by app. `addAdminRoutes` resolves each model's
+app from the project's app registry (`project.apps`), so models registered
+through `defineApp` are grouped automatically; pass
+`adminModel(Post, { app: 'blog' })` to override, and models owned by no app
+fall into an "Other" section.
+
+The sidebar also lists the project's functions (`defineApp({ ..., functions })`)
+in a Functions section. Staff can run one from the UI with a JSON payload; the
+invocation goes through the project's configured function transport, exactly
+like `fn.invoke()` from application code. Pass `functions` to `addAdminRoutes`
+to expose a different set (or `[]` to hide them).
+
 Auth is the contrib-auth token model: create a staff user with
 `createSuperuser(...)`, log in at `POST /admin/api/auth/login/`, and every
 admin endpoint requires `Authorization: Bearer tango_...` plus
@@ -46,6 +58,7 @@ Mounted under `/admin/api` by default:
 | `POST /auth/logout/` | Revoke the presented token |
 | `GET /auth/me/` | The authenticated admin user |
 | `GET /meta/` | Site schema — models, fields, relations, list config |
+| `POST /functions/:app/:name/` | Run an admin-exposed function: `{ payload }` → `{ result }` |
 | `GET/POST /<table>/` | List (paginated) and create |
 | `GET/PATCH/DELETE /<table>/:id/` | Retrieve, partial update, delete |
 

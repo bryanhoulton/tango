@@ -20,8 +20,15 @@ HTTP primitives, permissions, authentication, or pagination yet.
 - `POST /resource/` create.
 - `PATCH /resource/:id/` partial update.
 - `DELETE /resource/:id/` destroy.
-- Custom collection/detail actions via `actions: [...]`, e.g. `GET /users/export/`
-  or `POST /users/:id/activate/`.
+- Custom collection/detail actions via `actions: [...]` (DRF's `@action`), e.g.
+  `GET /users/export/` or `POST /users/:id/activate/`:
+  - Detail handlers receive `(ctx, row)` — the row is resolved DRF-style through
+    the scoped queryset (out-of-scope or missing rows 404) and past the
+    object-permission pass before the handler runs.
+  - Per-action `authentication` and `permissions` replace the viewset-level
+    classes for that action (DRF's `@action(permission_classes=...)`).
+  - Collection action routes register before the `/:id/` routes, so
+    `GET /users/export/` is never captured as a retrieve with id `"export"`.
 - Per-action OpenAPI overrides for built-in and custom routes.
 - Configured query-param filters for list endpoints, ANDed together via the ORM.
 - Optional page/pageSize pagination envelope: `{ count, next, previous, results }`,
@@ -38,6 +45,12 @@ HTTP primitives, permissions, authentication, or pagination yet.
 - Object-level permissions for detail actions, checked after the row is fetched and
   before any write: permission classes implementing `hasObjectPermission`, plus the
   `objectPermission: (ctx, row) => boolean` shorthand. Denial is a 403.
+- Read-only nested serializers: when the serializer declares `nested: { ... }`,
+  list/retrieve/create/PATCH responses carry the nested relations. The viewset
+  `selectRelated`s every nested relation path (including deeper nesting like
+  `author__organization`), and re-fetches the row after writes so create/update
+  responses include nested data. Nested metadata flows into route metadata for
+  OpenAPI generation.
 - Serializer validation errors returned with status 400.
 - PATCH uses partial serializer validation, so omitted fields are not erased.
 - Malformed JSON returned as `{ detail: 'Malformed JSON.' }` with status 400.
@@ -52,7 +65,9 @@ HTTP primitives, permissions, authentication, or pagination yet.
 - **Declarative behavior:** filters, pagination, auth, and permissions are configured on
   the viewset; user code should not rewrite request dispatch for common cases.
 - **Custom actions:** use explicit action declarations rather than decorators for now;
-  each action can declare route shape, handler, and OpenAPI metadata in one place.
+  each action declares route shape, handler, per-action auth/permissions, and OpenAPI
+  metadata in one place. Detail actions go through the same object-resolution path
+  as the built-in detail routes, so scoping and object permissions cannot be skipped.
 - **DRF auth semantics:** authentication classes may attach `ctx.user`; permission
   classes decide access and produce DRF-like response envelopes.
 - **Convention over configuration:** a model + serializer declaration is enough for
@@ -71,3 +86,6 @@ Everything exported from `src/index.ts`.
   pagination, permissions, PATCH/DELETE, and malformed JSON.
 - Integration (`test/model-viewset-auth.integration.test.ts`): auth classes and
   permission classes over real Web requests.
+- Integration (`test/model-viewset-actions.integration.test.ts`): custom action
+  semantics — detail object resolution, scoping 404s, object permissions, and
+  per-action authentication/permission overrides.

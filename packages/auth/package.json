@@ -1,6 +1,6 @@
 {
   "name": "@tango-ts/auth",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Stateless DRF-style authentication and permissions for Tango.",
   "license": "MIT",
   "type": "module",
@@ -21,7 +21,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "dependencies": {
+  "peerDependencies": {
     "@tango-ts/http": "*"
   }
 }

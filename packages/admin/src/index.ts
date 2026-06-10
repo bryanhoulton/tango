@@ -1,5 +1,6 @@
 export { adminModel } from './config.js'
 export type {
+  AdminFunctionDefinition,
   AdminModelDefinition,
   AdminModelOptions,
   AdminPagination,
@@ -8,6 +9,7 @@ export type {
 export { buildAdminMeta, humanize } from './meta.js'
 export type {
   AdminFieldMeta,
+  AdminFunctionMeta,
   AdminMetaDocument,
   AdminMetaOptions,
   AdminModelMeta,

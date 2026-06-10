@@ -14,6 +14,7 @@ import {
   type IssueTokenOptions
 } from '@tango-ts/contrib-auth'
 import type { HashPasswordOptions } from '@tango-ts/contrib-auth'
+import { getFunctionRuntime, type JsonValue } from '@tango-ts/functions'
 import {
   detailResponse,
   jsonResponse,
@@ -23,6 +24,7 @@ import { createRouter, include, type Router } from '@tango-ts/router'
 import type { TangoProject } from '@tango-ts/server'
 
 import type {
+  AdminFunctionDefinition,
   AdminModelDefinition,
   AdminPagination,
   AdminViewSetContext
@@ -32,6 +34,11 @@ import { buildAdminMeta, type AdminMetaDocument } from './meta.js'
 export interface AdminOptions {
   /** Registered models, from `adminModel(...)`. */
   readonly models: readonly AdminModelDefinition[]
+  /**
+   * Staff-runnable functions, shown in the UI's Functions section.
+   * `addAdminRoutes` defaults to every function owned by the project's apps.
+   */
+  readonly functions?: readonly AdminFunctionDefinition[]
   /** Site title shown by the UI. `addAdminRoutes` defaults to the project name. */
   readonly title?: string
   /**
@@ -159,6 +166,41 @@ async function login(ctx: RequestContext, options: AdminOptions): Promise<Respon
   return jsonResponse({ token: issued.token, user: publicUser(refreshed) })
 }
 
+/**
+ * Run an admin-exposed function. The body is `{ payload }` (or empty for a
+ * null payload); the function executes through the project's configured
+ * transport, exactly like `fn.invoke()` from application code.
+ */
+async function runFunction(
+  ctx: RequestContext,
+  definition: AdminFunctionDefinition
+): Promise<Response> {
+  let payload: JsonValue = null
+  const text = await ctx.request.text()
+  if (text.length > 0) {
+    let body: unknown
+    try {
+      body = JSON.parse(text)
+    } catch {
+      return detailResponse('Malformed JSON.', 400)
+    }
+    if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+      return detailResponse('Expected a {"payload": ...} body.', 400)
+    }
+    payload = ((body as Record<string, unknown>)['payload'] ?? null) as JsonValue
+  }
+  try {
+    const result = await getFunctionRuntime().invoke(definition.fn, payload)
+    return jsonResponse({ result: result ?? null })
+  } catch (err) {
+    // Failures surface to the staff user running the function, not as an
+    // opaque 500: the message is the only diagnostic the UI can show.
+    const detail =
+      err instanceof Error ? err.message : 'Function invocation failed.'
+    return detailResponse(detail, 500)
+  }
+}
+
 async function logout(ctx: RequestContext): Promise<Response> {
   const token = bearerToken(ctx)
   if (token === undefined) {
@@ -180,6 +222,7 @@ async function logout(ctx: RequestContext): Promise<Response> {
  * - `POST /auth/logout/` — revokes the presented Bearer token
  * - `GET  /auth/me/`     — the authenticated admin user
  * - `GET  /meta/`        — the admin site schema (drives the UI)
+ * - `POST /functions/:app/:name/` — run an admin-exposed function
  * - CRUD viewsets at `/<table>/` and `/<table>/:id/` for every model
  */
 export function adminRouter(
@@ -189,6 +232,7 @@ export function adminRouter(
   const authentication = options.authentication ?? [authTokenAuthentication()]
   const permissions = options.permissions ?? [IsAdminUser]
   const pagination = options.pagination ?? DEFAULT_PAGINATION
+  const functions = options.functions ?? []
   const shared: AdminViewSetContext = { authentication, permissions, pagination }
 
   // Routes are static after startup, so the meta document is built once.
@@ -197,7 +241,8 @@ export function adminRouter(
     meta ??= buildAdminMeta(options.models, {
       title: options.title ?? 'Tango Admin',
       basePath,
-      pagination
+      pagination,
+      functions
     })
     return meta
   }
@@ -213,6 +258,20 @@ export function adminRouter(
     const authed = await authorize(ctx, authentication, permissions)
     return authed instanceof Response ? authed : jsonResponse(metaDocument())
   })
+  router.add('POST', '/functions/:app/:name/', async (ctx) => {
+    const authed = await authorize(ctx, authentication, permissions)
+    if (authed instanceof Response) {
+      return authed
+    }
+    const definition = functions.find(
+      (candidate) =>
+        candidate.app === ctx.params['app'] &&
+        candidate.fn.name === ctx.params['name']
+    )
+    return definition === undefined
+      ? detailResponse('Unknown function.', 404)
+      : runFunction(authed, definition)
+  })
   for (const definition of options.models) {
     router.register(`/${definition.name}`, definition.createRoutable(shared))
   }
@@ -222,6 +281,28 @@ export function adminRouter(
 export interface AddAdminRoutesOptions extends AdminOptions {
   /** Where to mount the admin API. Defaults to `/admin/api`. */
   readonly path?: string
+}
+
+/**
+ * Fill in each definition's app from the project's app registry (Django's
+ * `app_label`). An explicit `adminModel(..., { app })` always wins; models
+ * not owned by any project app stay ungrouped.
+ */
+function resolveApps(
+  project: TangoProject,
+  definitions: readonly AdminModelDefinition[]
+): readonly AdminModelDefinition[] {
+  const appByTable = new Map<string, string>()
+  for (const app of project.apps) {
+    for (const model of app.models) {
+      appByTable.set(model.tableName, app.name)
+    }
+  }
+  return definitions.map((definition) =>
+    definition.app === undefined
+      ? { ...definition, app: appByTable.get(definition.tableName) }
+      : definition
+  )
 }
 
 /**
@@ -244,7 +325,16 @@ export function addAdminRoutes(
 ): void {
   const basePath = options.path ?? '/admin/api'
   const router = adminRouter(
-    { ...options, title: options.title ?? defaultSiteTitle(project.name) },
+    {
+      ...options,
+      models: resolveApps(project, options.models),
+      functions:
+        options.functions ??
+        project.apps.flatMap((app) =>
+          app.functions.map((fn) => ({ app: app.name, fn }))
+        ),
+      title: options.title ?? defaultSiteTitle(project.name)
+    },
     basePath
   )
   include(basePath, router).register(project.routes)

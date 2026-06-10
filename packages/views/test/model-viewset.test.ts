@@ -41,24 +41,67 @@ describe('modelViewSet', () => {
           detail: false,
           handler: () => Response.json({ ok: true })
         },
+        // `detail` defaults to false: collection action.
+        {
+          name: 'stats',
+          method: 'GET',
+          path: 'stats',
+          handler: () => Response.json({ ok: true })
+        },
         {
           name: 'activate',
           method: 'POST',
           path: 'activate',
           detail: true,
-          handler: () => Response.json({ ok: true })
+          // Detail handlers receive the resolved row, fully typed.
+          handler: (_ctx, user) => Response.json({ email: user.email })
         }
       ]
     })
 
+    // Collection actions register before `/:id/` so the router never
+    // captures `/users/export/` as a retrieve with id "export".
     expect(viewset.routes('/users').map((route) => [route.method, route.path])).toEqual([
       ['GET', '/users/'],
       ['POST', '/users/'],
+      ['GET', '/users/export/'],
+      ['GET', '/users/stats/'],
       ['GET', '/users/:id/'],
       ['PATCH', '/users/:id/'],
       ['DELETE', '/users/:id/'],
-      ['GET', '/users/export/'],
       ['POST', '/users/:id/activate/']
     ])
+  })
+
+  it('exposes nested serializer metadata on routes (consumed by OpenAPI)', () => {
+    const Post = model('posts', {
+      id: f.int().primaryKey().autoIncrement(),
+      title: f.varchar(255),
+      authorId: f.foreignKey(() => User, 'id')
+    })
+    const PostSerializer = modelSerializer(Post, {
+      fields: ['id', 'title', 'authorId'] as const,
+      readOnlyFields: ['id'] as const,
+      nested: { author: UserSerializer }
+    })
+    const viewset = modelViewSet({ model: Post, serializer: PostSerializer })
+
+    const [listRoute] = viewset.routes('/posts')
+    const metadata = listRoute?.metadata
+    expect(metadata).toMatchObject({
+      kind: 'modelViewSet',
+      serializer: {
+        fields: ['id', 'title', 'authorId'],
+        readOnlyFields: ['id'],
+        nested: {
+          author: {
+            fields: ['id', 'email', 'name'],
+            readOnlyFields: ['id'],
+            modelFields: User.fields,
+            nested: {}
+          }
+        }
+      }
+    })
   })
 })

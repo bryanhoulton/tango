@@ -1,6 +1,6 @@
 {
   "name": "@tango-ts/cli",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Tango management commands: makemigrations, migrate, and migration checks.",
   "license": "MIT",
   "type": "module",
@@ -26,10 +26,12 @@
     "access": "public"
   },
   "dependencies": {
+    "kysely": "^0.29.2"
+  },
+  "peerDependencies": {
     "@tango-ts/adapters": "*",
     "@tango-ts/contrib-auth": "*",
     "@tango-ts/migrations": "*",
-    "@tango-ts/orm": "*",
-    "kysely": "^0.29.2"
+    "@tango-ts/orm": "*"
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "@tango-ts/server",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Declarative server entrypoint helpers for Tango apps.",
   "license": "MIT",
   "type": "module",
@@ -22,12 +22,14 @@
     "access": "public"
   },
   "dependencies": {
+    "kysely": "^0.29.2"
+  },
+  "peerDependencies": {
     "@tango-ts/adapters": "*",
     "@tango-ts/auth": "*",
     "@tango-ts/functions": "*",
     "@tango-ts/http": "*",
     "@tango-ts/orm": "*",
-    "@tango-ts/router": "*",
-    "kysely": "^0.29.2"
+    "@tango-ts/router": "*"
   }
 }

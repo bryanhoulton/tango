@@ -1,6 +1,6 @@
 {
   "name": "@tango-ts/admin",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Schema-driven admin API for Tango: model metadata, staff-gated auth, and admin CRUD viewsets. Pure JSON — the React UI ships separately in @tango-ts/admin-ui as static assets, so this package adds no UI weight to serverless function bundles.",
   "license": "MIT",
   "type": "module",
@@ -21,10 +21,11 @@
   "publishConfig": {
     "access": "public"
   },
-  "dependencies": {
+  "peerDependencies": {
     "@tango-ts/auth": "*",
     "@tango-ts/contrib-auth": "*",
     "@tango-ts/core-types": "*",
+    "@tango-ts/functions": "*",
     "@tango-ts/http": "*",
     "@tango-ts/orm": "*",
     "@tango-ts/router": "*",

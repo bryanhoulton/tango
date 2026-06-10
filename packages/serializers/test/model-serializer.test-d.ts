@@ -57,3 +57,81 @@ test('configured fields must exist on the model', () => {
     fields: ['id', 'nickname'] as const
   })
 })
+
+// --- Nested serializers ------------------------------------------------------
+
+const Author = model('authors', {
+  id: f.int().primaryKey().autoIncrement(),
+  name: f.varchar(255)
+})
+
+const Post = model('posts', {
+  id: f.int().primaryKey().autoIncrement(),
+  title: f.varchar(255),
+  authorId: f.foreignKey(() => Author, 'id')
+})
+
+const AuthorSerializer = modelSerializer(Author, {
+  fields: ['id', 'name'] as const,
+  readOnlyFields: ['id'] as const
+})
+
+const PostSerializer = modelSerializer(Post, {
+  fields: ['id', 'title', 'authorId'] as const,
+  readOnlyFields: ['id'] as const,
+  nested: { author: AuthorSerializer }
+})
+
+test('nested output is inferred from the nested serializer', () => {
+  const output = PostSerializer.serialize({
+    id: 1,
+    title: 'Hi',
+    authorId: 2,
+    author: { id: 2, name: 'Ada' }
+  })
+  expectTypeOf(output).toEqualTypeOf<{
+    id: number
+    title: string
+    authorId: number
+    author: {
+      id: number
+      name: string
+    }
+  }>()
+})
+
+test('serialize requires the related row when nesting is configured', () => {
+  // @ts-expect-error author relation data is required by the nested serializer
+  PostSerializer.serialize({ id: 1, title: 'Hi', authorId: 2 })
+})
+
+test('nested keys must be relation names on the model', () => {
+  modelSerializer(Post, {
+    fields: ['id', 'title'] as const,
+    // @ts-expect-error reviewer is not a relation of Post
+    nested: { reviewer: AuthorSerializer }
+  })
+})
+
+test('nested serializers must serialize the related model', () => {
+  const Tag = model('tags', {
+    id: f.int().primaryKey().autoIncrement(),
+    label: f.varchar(255)
+  })
+  const TagSerializer = modelSerializer(Tag, {
+    fields: ['id', 'label'] as const
+  })
+  modelSerializer(Post, {
+    fields: ['id', 'title'] as const,
+    // @ts-expect-error TagSerializer cannot serialize Post's author rows
+    nested: { author: TagSerializer }
+  })
+})
+
+test('models without relations accept no nested keys', () => {
+  modelSerializer(User, {
+    fields: ['id', 'email'] as const,
+    // @ts-expect-error User has no relations
+    nested: { author: AuthorSerializer }
+  })
+})

@@ -72,9 +72,26 @@ export interface OpenApiOperationOverride {
   readonly responses?: Record<string, OpenApiResponseObject>
 }
 
+/**
+ * What the viewset can see of a nested serializer (read-only nesting): enough
+ * to select the relations it serializes and to describe its output schema.
+ */
+export interface NestedSerializerInfo {
+  serialize(row: never): unknown
+  readonly model?: { readonly fields: Fields }
+  readonly fields?: readonly string[]
+  readonly readOnlyFields?: readonly string[]
+  readonly nested?: NestedSerializerInfoMap
+}
+
+export type NestedSerializerInfoMap = Readonly<
+  Record<string, NestedSerializerInfo | undefined>
+>
+
 export interface ModelSerializerLike<F extends Fields, Out> {
   readonly fields?: readonly (keyof F & string)[]
   readonly readOnlyFields?: readonly (keyof F & string)[]
+  readonly nested?: NestedSerializerInfoMap
   serialize(row: InferSelect<F>): Out
   forUnknownInput(
     input: unknown,
@@ -86,6 +103,14 @@ export interface ModelSerializerLike<F extends Fields, Out> {
   >
 }
 
+/** Schema metadata for one nested serializer, consumed by OpenAPI generation. */
+export interface NestedSerializerMetadata {
+  readonly fields: readonly string[]
+  readonly readOnlyFields: readonly string[]
+  readonly modelFields: Fields
+  readonly nested: Readonly<Record<string, NestedSerializerMetadata>>
+}
+
 export interface ModelViewSetRouteMetadata<F extends Fields> {
   readonly kind: 'modelViewSet'
   readonly action: 'list' | 'retrieve' | 'create' | 'custom'
@@ -94,18 +119,51 @@ export interface ModelViewSetRouteMetadata<F extends Fields> {
   readonly serializer: {
     readonly fields: readonly (keyof F & string)[]
     readonly readOnlyFields: readonly (keyof F & string)[]
+    readonly nested: Readonly<Record<string, NestedSerializerMetadata>>
   }
   readonly openApi?: OpenApiOperationOverride
 }
 
-export interface ModelViewSetAction {
+interface ModelViewSetActionCommon {
   readonly name: string
   readonly method: Route['method']
   readonly path: string
-  readonly detail: boolean
-  readonly handler: Route['handler']
+  /**
+   * Per-action authentication classes (DRF's `@action(authentication_classes)`).
+   * When set, replaces the viewset-level `authentication` for this action.
+   */
+  readonly authentication?: readonly Authentication[]
+  /**
+   * Per-action permissions (DRF's `@action(permission_classes)`). When set,
+   * replaces the viewset-level `permissions` for this action — including the
+   * object-level pass for detail actions.
+   */
+  readonly permissions?: readonly PermissionCheck[]
   readonly openApi?: OpenApiOperationOverride
 }
+
+export interface ModelViewSetCollectionAction extends ModelViewSetActionCommon {
+  readonly detail?: false
+  readonly handler: (ctx: RequestContext) => MaybePromise<Response>
+}
+
+export interface ModelViewSetDetailAction<F extends Fields>
+  extends ModelViewSetActionCommon {
+  readonly detail: true
+  /**
+   * Detail handlers receive the row, already resolved DRF-style: fetched
+   * through the scoped queryset (out-of-scope rows 404) and past the
+   * object-permission pass.
+   */
+  readonly handler: (
+    ctx: RequestContext,
+    row: InferSelect<F>
+  ) => MaybePromise<Response>
+}
+
+export type ModelViewSetAction<F extends Fields = Fields> =
+  | ModelViewSetCollectionAction
+  | ModelViewSetDetailAction<F>
 
 export interface ModelViewSetOpenApiOverrides {
   readonly list?: OpenApiOperationOverride
@@ -159,7 +217,7 @@ export interface ModelViewSetOptions<F extends Fields, Out> {
   readonly authenticate?: (ctx: RequestContext) => Promise<AuthResult> | AuthResult
   readonly authentication?: readonly Authentication[]
   readonly permissions?: readonly PermissionCheck[]
-  readonly actions?: readonly ModelViewSetAction[]
+  readonly actions?: readonly ModelViewSetAction<F>[]
   readonly openApi?: ModelViewSetOpenApiOverrides
 }
 
@@ -260,6 +318,44 @@ function pageUrl(ctx: RequestContext, page: number): string {
   return url.toString()
 }
 
+/**
+ * The `selectRelated` paths a serializer's nested config requires, including
+ * deeper paths when nested serializers nest again (`author`, `author__org`).
+ */
+function nestedRelationPaths(
+  nested: NestedSerializerInfoMap | undefined,
+  prefix?: string
+): readonly string[] {
+  const paths: string[] = []
+  for (const [name, child] of Object.entries(nested ?? {})) {
+    if (child === undefined) {
+      continue
+    }
+    const path = prefix === undefined ? name : `${prefix}__${name}`
+    paths.push(path, ...nestedRelationPaths(child.nested, path))
+  }
+  return paths
+}
+
+function nestedSerializerMetadata(
+  nested: NestedSerializerInfoMap | undefined
+): Readonly<Record<string, NestedSerializerMetadata>> {
+  const metadata: Record<string, NestedSerializerMetadata> = {}
+  for (const [name, child] of Object.entries(nested ?? {})) {
+    if (child === undefined) {
+      continue
+    }
+    const modelFields = child.model?.fields ?? {}
+    metadata[name] = {
+      fields: child.fields ?? Object.keys(modelFields),
+      readOnlyFields: child.readOnlyFields ?? [],
+      modelFields,
+      nested: nestedSerializerMetadata(child.nested)
+    }
+  }
+  return metadata
+}
+
 export class ModelViewSet<F extends Fields, Out> {
   private readonly pkColumn: string
 
@@ -268,7 +364,7 @@ export class ModelViewSet<F extends Fields, Out> {
   }
 
   routes(basePath: string): readonly ViewSetRoute[] {
-    const baseRoutes: ViewSetRoute[] = [
+    const collectionRoutes: ViewSetRoute[] = [
       {
         method: 'GET',
         path: joinPaths(basePath, '/'),
@@ -280,7 +376,9 @@ export class ModelViewSet<F extends Fields, Out> {
         path: joinPaths(basePath, '/'),
         handler: (ctx) => this.dispatch(ctx, (authedCtx) => this.create(authedCtx)),
         metadata: this.metadata('create', this.options.openApi?.create)
-      },
+      }
+    ]
+    const detailRoutes: ViewSetRoute[] = [
       {
         method: 'GET',
         path: joinPaths(basePath, '/:id/'),
@@ -300,17 +398,32 @@ export class ModelViewSet<F extends Fields, Out> {
         metadata: this.metadata('custom', undefined, 'destroy')
       }
     ]
-    const customRoutes = (this.options.actions ?? []).map((action) => ({
+    const actionRoute = (action: ModelViewSetAction<F>): ViewSetRoute => ({
       method: action.method,
       path: joinPaths(
         basePath,
-        action.detail ? `/:id/${action.path}/` : `/${action.path}/`
+        action.detail === true ? `/:id/${action.path}/` : `/${action.path}/`
       ),
       handler: (ctx: RequestContext) =>
-        this.dispatch(ctx, (authedCtx) => Promise.resolve(action.handler(authedCtx))),
+        this.dispatch(
+          ctx,
+          (authedCtx) =>
+            action.detail === true
+              ? this.runDetailAction(authedCtx, action)
+              : Promise.resolve(action.handler(authedCtx)),
+          action
+        ),
       metadata: this.metadata('custom', action.openApi, action.name)
-    }))
-    return [...baseRoutes, ...customRoutes]
+    })
+    const actions = this.options.actions ?? []
+    // DRF route ordering: collection actions register before the `/:id/`
+    // routes so `GET /users/export/` is not captured by `GET /users/:id/`.
+    return [
+      ...collectionRoutes,
+      ...actions.filter((action) => action.detail !== true).map(actionRoute),
+      ...detailRoutes,
+      ...actions.filter((action) => action.detail === true).map(actionRoute)
+    ]
   }
 
   private metadata(
@@ -325,7 +438,8 @@ export class ModelViewSet<F extends Fields, Out> {
       model: this.options.model,
       serializer: {
         fields: this.options.serializer.fields ?? Object.keys(this.options.model.fields),
-        readOnlyFields: this.options.serializer.readOnlyFields ?? []
+        readOnlyFields: this.options.serializer.readOnlyFields ?? [],
+        nested: nestedSerializerMetadata(this.options.serializer.nested)
       },
       openApi
     }
@@ -333,15 +447,19 @@ export class ModelViewSet<F extends Fields, Out> {
 
   private async dispatch(
     ctx: RequestContext,
-    handler: (ctx: RequestContext) => Promise<Response>
+    handler: (ctx: RequestContext) => Promise<Response>,
+    overrides?: Pick<ModelViewSetActionCommon, 'authentication' | 'permissions'>
   ): Promise<Response> {
-    // Precedence: this viewset's authentication classes, then the legacy
-    // `authenticate` hook, then any user already on the context (set by
-    // project-level authentication in `defineServer`/`defineProject`).
+    // Precedence: the action's (or this viewset's) authentication classes,
+    // then the legacy `authenticate` hook, then any user already on the
+    // context (set by project-level authentication in `defineServer`/
+    // `defineProject`).
+    const authentication =
+      overrides?.authentication ?? this.options.authentication ?? []
     let user: unknown
     try {
       user =
-        (await runAuthentication(ctx, this.options.authentication ?? [])) ??
+        (await runAuthentication(ctx, authentication)) ??
         (await this.options.authenticate?.(ctx)) ??
         ctx.user
     } catch (err) {
@@ -351,11 +469,42 @@ export class ModelViewSet<F extends Fields, Out> {
       throw err
     }
     const authedCtx: RequestContext = { ...ctx, user }
-    const denied = await checkPermissions(authedCtx, this.options.permissions ?? [])
+    const permissions = overrides?.permissions ?? this.options.permissions ?? []
+    const denied = await checkPermissions(authedCtx, permissions)
     if (denied !== undefined) {
       return denied
     }
     return handler(authedCtx)
+  }
+
+  /**
+   * Detail custom actions get DRF's `get_object()` treatment: pk coercion,
+   * scoped-queryset fetch (out-of-scope rows 404), and the object-permission
+   * pass — using the action's permissions when it declares its own.
+   */
+  private async runDetailAction(
+    ctx: RequestContext,
+    action: ModelViewSetDetailAction<F>
+  ): Promise<Response> {
+    const id = ctx.params['id']
+    if (id === undefined) {
+      return detailResponse('Not found.', 404)
+    }
+    const pkField = this.options.model.fields[this.pkColumn] as Field
+    const pkValue = coercePrimaryKey(id, pkField)
+    try {
+      const row = await this.getScopedObject(ctx, pkValue)
+      const denied = await this.deniedForObject(ctx, row, action.permissions)
+      if (denied !== undefined) {
+        return denied
+      }
+      return await action.handler(ctx, row)
+    } catch (err) {
+      if (err instanceof DoesNotExist) {
+        return detailResponse('Not found.', 404)
+      }
+      throw err
+    }
   }
 
   private scopedQuery(ctx: RequestContext): QuerySet<InferSelect<F>, Lookups<F>> {
@@ -364,12 +513,46 @@ export class ModelViewSet<F extends Fields, Out> {
       : this.options.queryset(ctx)
   }
 
+  /**
+   * Apply `selectRelated` for every relation the serializer's nested config
+   * serializes, so rows reach `serialize` with their related data attached.
+   */
+  private withNestedRelations(
+    query: QuerySet<InferSelect<F>, Lookups<F>>
+  ): QuerySet<InferSelect<F>, Lookups<F>> {
+    // The serializer's nested keys are validated relation names at its own
+    // type level; the viewset applies them as runtime paths.
+    let related = query as QuerySet<InferSelect<F>, Lookups<F>, string>
+    for (const path of nestedRelationPaths(this.options.serializer.nested)) {
+      related = related.selectRelated(path)
+    }
+    return related
+  }
+
+  /**
+   * Re-fetch a row with nested relations attached before serializing it.
+   * Used after writes (`create`/`update`), which return flat rows. Unscoped on
+   * purpose: the write already passed scoping, and DRF serializes the saved
+   * instance even when the write moves it out of scope.
+   */
+  private async hydrateNested(row: InferSelect<F>): Promise<InferSelect<F>> {
+    if (nestedRelationPaths(this.options.serializer.nested).length === 0) {
+      return row
+    }
+    const pkValue = (row as Record<string, unknown>)[this.pkColumn]
+    return this.withNestedRelations(this.options.model.objects.all()).get({
+      [this.pkColumn]: pkValue
+    } as Lookups<F>)
+  }
+
   /** Fetch one row by pk through the scoped queryset; out of scope = DoesNotExist. */
   private getScopedObject(
     ctx: RequestContext,
     pkValue: string | number
   ): Promise<InferSelect<F>> {
-    return this.scopedQuery(ctx).get({ [this.pkColumn]: pkValue } as Lookups<F>)
+    return this.withNestedRelations(this.scopedQuery(ctx)).get({
+      [this.pkColumn]: pkValue
+    } as Lookups<F>)
   }
 
   /**
@@ -379,11 +562,12 @@ export class ModelViewSet<F extends Fields, Out> {
    */
   private async deniedForObject(
     ctx: RequestContext,
-    row: InferSelect<F>
+    row: InferSelect<F>,
+    permissions?: readonly PermissionCheck[]
   ): Promise<Response | undefined> {
     const denied = await checkObjectPermissions(
       ctx,
-      this.options.permissions ?? [],
+      permissions ?? this.options.permissions ?? [],
       row
     )
     if (denied !== undefined) {
@@ -442,7 +626,7 @@ export class ModelViewSet<F extends Fields, Out> {
   async list(ctx: RequestContext): Promise<Response> {
     const filters = this.filtersFromQuery(ctx)
     const hasFilters = Object.keys(filters).length > 0
-    const base = this.scopedQuery(ctx)
+    const base = this.withNestedRelations(this.scopedQuery(ctx))
     const query = hasFilters ? base.filter(filters) : base
     if (this.options.pagination !== undefined) {
       return jsonResponse(
@@ -490,7 +674,10 @@ export class ModelViewSet<F extends Fields, Out> {
       return jsonResponse(serializer.errors satisfies ValidationErrors, { status: 400 })
     }
     const row = await serializer.save()
-    return jsonResponse(this.options.serializer.serialize(row), { status: 201 })
+    return jsonResponse(
+      this.options.serializer.serialize(await this.hydrateNested(row)),
+      { status: 201 }
+    )
   }
 
   async partialUpdate(ctx: RequestContext): Promise<Response> {
@@ -523,7 +710,9 @@ export class ModelViewSet<F extends Fields, Out> {
         { [this.pkColumn]: pkValue } as Lookups<F>,
         (serializer.validatedData ?? {}) as InferUpdate<F>
       )
-      return jsonResponse(this.options.serializer.serialize(row))
+      return jsonResponse(
+        this.options.serializer.serialize(await this.hydrateNested(row))
+      )
     } catch (err) {
       if (err instanceof DoesNotExist) {
         return detailResponse('Not found.', 404)

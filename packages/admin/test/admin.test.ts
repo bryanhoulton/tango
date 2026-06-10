@@ -1,9 +1,22 @@
 import { describe, expect, it } from 'vitest'
 
 import type { Authentication } from '@tango-ts/auth'
+import {
+  defineFunction,
+  withFunctionRuntime,
+  type FunctionRuntime
+} from '@tango-ts/functions'
 import { f, model } from '@tango-ts/orm'
+import { createRouter } from '@tango-ts/router'
+import { defineApp, type TangoProject } from '@tango-ts/server'
 
-import { adminModel, adminRouter, humanize, type AdminMetaDocument } from '../src/index.js'
+import {
+  addAdminRoutes,
+  adminModel,
+  adminRouter,
+  humanize,
+  type AdminMetaDocument
+} from '../src/index.js'
 
 // The production shape: two related models registered with the admin, exactly
 // as a project would in `addAdminRoutes`. The fake authentication below stands
@@ -139,6 +152,183 @@ describe('admin meta endpoint', () => {
       apiPath: '/admin/api/authors/',
       displayField: 'name'
     })
+  })
+})
+
+describe('admin app grouping', () => {
+  it('omits app when no model declares one', async () => {
+    const meta = await fetchMeta()
+    expect(meta.models.every((m) => m.app === undefined)).toBe(true)
+  })
+
+  it('serializes an explicit app option as a humanized label', async () => {
+    const grouped = adminRouter({
+      models: [adminModel(Post, { app: 'blog_content' })],
+      authentication: [headerAuthentication]
+    })
+    const response = await grouped.handle(request('/meta/', staff))
+    const meta = (await response.json()) as AdminMetaDocument
+    expect(meta.models[0]?.app).toBe('Blog content')
+  })
+
+  it('derives apps from the project app registry in addAdminRoutes', async () => {
+    // The production wiring: project apps own models, and `addAdminRoutes`
+    // matches registered admin models against them. Posts override the
+    // derived app; Authors inherit `blog`; the unowned model stays ungrouped.
+    const Orphan = model('orphans', {
+      id: f.int().primaryKey().autoIncrement()
+    })
+    const routes = createRouter()
+    const project = {
+      name: 'grouping',
+      routes,
+      apps: [defineApp({ name: 'blog', models: [Author, Post] })]
+    } as unknown as TangoProject
+
+    addAdminRoutes(project, {
+      models: [
+        adminModel(Author),
+        adminModel(Post, { app: 'publishing' }),
+        adminModel(Orphan)
+      ],
+      authentication: [headerAuthentication]
+    })
+
+    const response = await routes.handle(request('/admin/api/meta/', staff))
+    expect(response.status).toBe(200)
+    const meta = (await response.json()) as AdminMetaDocument
+    expect(meta.models.map((m) => [m.name, m.app])).toEqual([
+      ['authors', 'Blog'],
+      ['posts', 'Publishing'],
+      ['orphans', undefined]
+    ])
+  })
+})
+
+describe('admin functions', () => {
+  const sendDigest = defineFunction({
+    name: 'send_digest',
+    handler: (payload: { readonly to: string }) =>
+      Promise.resolve({ sent: true, to: payload.to })
+  })
+  const explode = defineFunction({
+    name: 'explode',
+    handler: (): Promise<never> => Promise.reject(new Error('boom'))
+  })
+
+  const fnRouter = adminRouter({
+    models: [],
+    functions: [
+      { app: 'blog', fn: sendDigest },
+      { app: 'blog', fn: explode }
+    ],
+    authentication: [headerAuthentication]
+  })
+
+  // Stands in for the project-wired runtime; the admin endpoint goes through
+  // `getFunctionRuntime().invoke`, so the configured transport applies.
+  const runtime: FunctionRuntime = {
+    invoke: (fn, payload) => fn.run(payload),
+    defer: () => undefined,
+    drain: () => Promise.resolve()
+  }
+
+  function invoke(
+    path: string,
+    body: string | undefined,
+    user?: Record<string, unknown>
+  ): Promise<Response> {
+    return withFunctionRuntime(runtime, () =>
+      fnRouter.handle(
+        new Request(`https://example.test${path}`, {
+          method: 'POST',
+          headers: user === undefined ? {} : { 'x-test-user': JSON.stringify(user) },
+          body
+        })
+      )
+    )
+  }
+
+  it('describes functions in the meta document', async () => {
+    const response = await fnRouter.handle(request('/meta/', staff))
+    const meta = (await response.json()) as AdminMetaDocument
+    expect(meta.functions).toEqual([
+      {
+        name: 'send_digest',
+        app: 'blog',
+        label: 'Send digest',
+        appLabel: 'Blog',
+        apiPath: '/admin/api/functions/blog/send_digest/'
+      },
+      {
+        name: 'explode',
+        app: 'blog',
+        label: 'Explode',
+        appLabel: 'Blog',
+        apiPath: '/admin/api/functions/blog/explode/'
+      }
+    ])
+  })
+
+  it('gates invocation behind the admin pipeline', async () => {
+    const anonymous = await invoke('/functions/blog/send_digest/', undefined)
+    expect(anonymous.status).toBe(401)
+    const nonStaff = await invoke('/functions/blog/send_digest/', undefined, {
+      id: 2,
+      isStaff: false
+    })
+    expect(nonStaff.status).toBe(403)
+  })
+
+  it('runs a function with the posted payload', async () => {
+    const response = await invoke(
+      '/functions/blog/send_digest/',
+      JSON.stringify({ payload: { to: 'ada@example.com' } }),
+      staff
+    )
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      result: { sent: true, to: 'ada@example.com' }
+    })
+  })
+
+  it('rejects unknown functions and malformed bodies', async () => {
+    const unknown = await invoke('/functions/blog/missing/', undefined, staff)
+    expect(unknown.status).toBe(404)
+    const malformed = await invoke(
+      '/functions/blog/send_digest/',
+      'not json',
+      staff
+    )
+    expect(malformed.status).toBe(400)
+  })
+
+  it('surfaces function failures as a 500 with the error message', async () => {
+    const response = await invoke('/functions/blog/explode/', undefined, staff)
+    expect(response.status).toBe(500)
+    await expect(response.json()).resolves.toEqual({ detail: 'boom' })
+  })
+
+  it('derives admin functions from the project apps in addAdminRoutes', async () => {
+    const routes = createRouter()
+    const project = {
+      name: 'fn-derivation',
+      routes,
+      apps: [
+        defineApp({ name: 'blog', models: [], functions: [sendDigest] })
+      ]
+    } as unknown as TangoProject
+
+    addAdminRoutes(project, {
+      models: [],
+      authentication: [headerAuthentication]
+    })
+
+    const response = await routes.handle(request('/admin/api/meta/', staff))
+    const meta = (await response.json()) as AdminMetaDocument
+    expect(meta.functions.map((fn) => [fn.app, fn.name])).toEqual([
+      ['blog', 'send_digest']
+    ])
   })
 })
 

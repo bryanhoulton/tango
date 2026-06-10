@@ -10,6 +10,7 @@
     { "path": "../auth/tsconfig.build.json" },
     { "path": "../contrib-auth/tsconfig.build.json" },
     { "path": "../core-types/tsconfig.build.json" },
+    { "path": "../functions/tsconfig.build.json" },
     { "path": "../http/tsconfig.build.json" },
     { "path": "../orm/tsconfig.build.json" },
     { "path": "../router/tsconfig.build.json" },

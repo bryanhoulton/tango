@@ -1,6 +1,6 @@
 {
   "name": "@tango-ts/orm",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Tango ORM: declarative models, managers, lazy querysets, Django-style lookups, compiled to Kysely (MySQL).",
   "license": "MIT",
   "type": "module",
@@ -22,8 +22,10 @@
     "access": "public"
   },
   "dependencies": {
-    "@tango-ts/core-types": "*",
     "kysely": "^0.29.2",
     "mysql2": "^3.22.5"
+  },
+  "peerDependencies": {
+    "@tango-ts/core-types": "*"
   }
 }

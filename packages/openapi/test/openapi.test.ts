@@ -101,6 +101,62 @@ describe('generateOpenApi', () => {
     })
   })
 
+  it('emits nested serializer output as read-only object schemas', () => {
+    const Author = model('authors', {
+      id: f.int().primaryKey().autoIncrement(),
+      name: f.varchar(255),
+      email: f.varchar(255)
+    })
+    const Post = model('posts', {
+      id: f.int().primaryKey().autoIncrement(),
+      title: f.varchar(255),
+      authorId: f.foreignKey(() => Author, 'id')
+    })
+    const AuthorSerializer = modelSerializer(Author, {
+      fields: ['id', 'name'] as const,
+      readOnlyFields: ['id'] as const
+    })
+    const PostSerializer = modelSerializer(Post, {
+      fields: ['id', 'title', 'authorId'] as const,
+      readOnlyFields: ['id'] as const,
+      nested: { author: AuthorSerializer }
+    })
+    const router = createRouter()
+    router.register(
+      '/posts',
+      modelViewSet({ model: Post, serializer: PostSerializer })
+    )
+
+    const schema = generateOpenApi(router, { title: 'Tango API', version: '1.0.0' })
+
+    expect(schema.components.schemas['Post']).toEqual({
+      type: 'object',
+      properties: {
+        id: { type: 'integer', readOnly: true },
+        title: { type: 'string', maxLength: 255 },
+        authorId: { type: 'integer' },
+        author: {
+          type: 'object',
+          readOnly: true,
+          properties: {
+            id: { type: 'integer', readOnly: true },
+            name: { type: 'string', maxLength: 255 }
+          }
+        }
+      },
+      required: ['title', 'authorId']
+    })
+    // Nested serializers are read-only: input schemas never include them.
+    expect(schema.components.schemas['PostInput']).toEqual({
+      type: 'object',
+      properties: {
+        title: { type: 'string', maxLength: 255 },
+        authorId: { type: 'integer' }
+      },
+      required: ['title', 'authorId']
+    })
+  })
+
   it('merges view-specific OpenAPI overrides and documents custom actions', () => {
     const router = createRouter()
     router.register(

@@ -1,5 +1,6 @@
 import type { Fields, Lookups } from '@tango-ts/core-types'
 import type { Authentication, Permission } from '@tango-ts/auth'
+import type { AnyTangoFunction } from '@tango-ts/functions'
 import { Field, type Model } from '@tango-ts/orm'
 import type { Routable } from '@tango-ts/router'
 import { modelSerializer } from '@tango-ts/serializers'
@@ -25,6 +26,12 @@ export interface AdminViewSetContext {
 export interface AdminModelOptions<F extends Fields> {
   /** Human label override. Defaults to a title-cased table name. */
   readonly label?: string
+  /**
+   * App the model belongs to — the UI groups sidebar entries by app, like
+   * Django's admin index. Defaults to the project app that registered the
+   * model (`addAdminRoutes` matches against `project.apps`).
+   */
+  readonly app?: string
   /** Fields exposed to the admin. Defaults to every model field. */
   readonly fields?: readonly (keyof F & string)[]
   /**
@@ -53,6 +60,8 @@ export interface AdminModelOptions<F extends Fields> {
 export interface AdminModelDefinition {
   readonly name: string
   readonly label: string | undefined
+  /** App name used for grouping. Resolved by `addAdminRoutes` when omitted. */
+  readonly app: string | undefined
   readonly tableName: string
   readonly modelFields: Fields
   readonly fieldNames: readonly string[]
@@ -62,6 +71,18 @@ export interface AdminModelDefinition {
   readonly listFilters: readonly string[]
   readonly ordering: readonly string[]
   createRoutable(shared: AdminViewSetContext): Routable
+}
+
+/**
+ * A function exposed in the admin: listed in the UI's Functions section and
+ * runnable by staff with a JSON payload. `addAdminRoutes` exposes every
+ * function owned by the project's apps; pass `functions` explicitly to
+ * expose a different set.
+ */
+export interface AdminFunctionDefinition {
+  /** Owning app — groups the sidebar entry and namespaces the invoke URL. */
+  readonly app: string
+  readonly fn: AnyTangoFunction
 }
 
 function asField(value: unknown): Field {
@@ -116,6 +137,7 @@ export function adminModel<F extends Fields>(
   return {
     name: model.tableName,
     label: options.label,
+    app: options.app,
     tableName: model.tableName,
     modelFields: model.fields,
     fieldNames,

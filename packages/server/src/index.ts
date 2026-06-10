@@ -145,10 +145,22 @@ export function mysqlFromEnv(options: MysqlEnvOptions = {}): Kysely<LooseDatabas
   return createMysqlConnection(mysqlConfigFromEnv(options))
 }
 
+/**
+ * The internal dispatch endpoint authenticates with an HMAC signature (see
+ * `createFunctionDispatchHandler`), not project credentials. Project-level
+ * authentication must not run for it: a self-invocation carries no
+ * `Authorization` header, and any auth class that rejects the request would
+ * 401 the dispatch before its signature is ever verified. The prefix is
+ * reserved, so bypassing auth here never exposes application routes.
+ */
+function isFunctionDispatch(request: Request): boolean {
+  return new URL(request.url).pathname.startsWith(`${FUNCTIONS_PATH_PREFIX}/`)
+}
+
 export function defineServer(config: ServerConfig): WebHandler {
   const authentication = config.authentication ?? []
   const routeRequest = async (request: Request): Promise<Response> => {
-    if (authentication.length === 0) {
+    if (authentication.length === 0 || isFunctionDispatch(request)) {
       return config.routes.handle(request)
     }
     // Authentication only reads the request (headers), so it runs before route
