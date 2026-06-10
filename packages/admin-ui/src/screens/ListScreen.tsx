@@ -18,16 +18,34 @@ import {
 import { formatValue, stringify } from '@/lib/format'
 import { navigate } from '@/lib/router'
 
-function isBooleanFilter(model: AdminModelMeta, filter: string): boolean {
-  return model.fields.some(
-    (field) => field.name === filter && field.type === 'boolean'
-  )
-}
-
 const BOOLEAN_FILTER_ITEMS = [
   { id: 'true', name: 'Yes' },
   { id: 'false', name: 'No' }
 ]
+
+/**
+ * Select items for a filter, when it maps to a field with a discrete value
+ * set: booleans and choice fields. Everything else gets a free-text input.
+ */
+function filterSelectItems(
+  model: AdminModelMeta,
+  filter: string
+): { id: string; name: string }[] | undefined {
+  const field = model.fields.find((candidate) => candidate.name === filter)
+  if (field === undefined) {
+    return undefined
+  }
+  if (field.type === 'boolean') {
+    return BOOLEAN_FILTER_ITEMS
+  }
+  if (field.choices !== undefined) {
+    return field.choices.map((choice) => ({
+      id: String(choice),
+      name: String(choice)
+    }))
+  }
+  return undefined
+}
 
 export function ListScreen({
   model,
@@ -122,15 +140,20 @@ export function ListScreen({
             }}
           />
         )}
-        {model.filters.map((filter) =>
-          isBooleanFilter(model, filter) ? (
+        {model.filters.map((filter) => {
+          const items = filterSelectItems(model, filter)
+          return items !== undefined ? (
             <Select
               key={filter}
               className="w-44"
               placeholder={filter}
-              items={BOOLEAN_FILTER_ITEMS}
+              items={items}
               clearable
-              value={filters[filter] ?? null}
+              value={
+                filters[filter] !== undefined && filters[filter].length > 0
+                  ? filters[filter]
+                  : null
+              }
               onChange={(value) => {
                 setFilters((prev) => ({ ...prev, [filter]: value ?? '' }))
                 setPage(1)
@@ -148,7 +171,7 @@ export function ListScreen({
               }}
             />
           )
-        )}
+        })}
       </div>
 
       {error !== undefined && (

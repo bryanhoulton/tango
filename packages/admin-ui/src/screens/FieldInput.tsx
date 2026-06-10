@@ -129,6 +129,26 @@ export function FieldInput(props: FieldInputProps) {
     return <RelationPicker {...props} />
   }
 
+  if (field.choices !== undefined) {
+    return (
+      <Select<string | number>
+        label={fieldLabel(field)}
+        placeholder={`Select ${field.label.toLowerCase()}…`}
+        items={field.choices.map((choice) => ({
+          id: choice,
+          name: String(choice)
+        }))}
+        value={
+          typeof value === 'string' || typeof value === 'number' ? value : null
+        }
+        disabled={disabled}
+        error={error}
+        clearable={field.nullable}
+        onChange={(selected) => onChange(selected)}
+      />
+    )
+  }
+
   switch (field.type) {
     case 'boolean':
       return (

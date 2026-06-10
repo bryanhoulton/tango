@@ -258,7 +258,8 @@ What you get: a sidebar of registered models, list views with search
 (`searchFields`), filters (`listFilters`), and server-side pagination,
 create/edit modals with widgets per column type and per-field validation
 errors straight from the serializer, foreign-key pickers that search the
-related model, and delete confirmations.
+related model, and delete confirmations. Fields declared with
+`.choices([...])` render as selects, both as list filters and in forms.
 
 ## Deployment
 

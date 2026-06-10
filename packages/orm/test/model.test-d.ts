@@ -51,6 +51,28 @@ test('select shape is inferred from the model', () => {
   }>()
 })
 
+test('choices narrow the field type to the literal union', () => {
+  const Article = model('articles', {
+    id: f.int().primaryKey().autoIncrement(),
+    status: f.varchar(20).choices(['draft', 'published']).default('draft'),
+    priority: f.int().choices([1, 2, 3]).nullable()
+  })
+
+  expectTypeOf<InferSelect<typeof Article.fields>>().toEqualTypeOf<{
+    id: number
+    status: 'draft' | 'published'
+    priority: 1 | 2 | 3 | null
+  }>()
+
+  void Article.objects.create({ status: 'published' })
+  // @ts-expect-error value outside the declared choices
+  void Article.objects.create({ status: 'archived' })
+  // @ts-expect-error default must be one of the declared choices
+  void f.varchar(20).choices(['draft', 'published']).default('archived')
+  // @ts-expect-error choices must match the column's value type
+  void f.varchar(20).choices([1, 2])
+})
+
 test('filter accepts valid, type-correct lookups', () => {
   type FilterArg = Parameters<typeof User.objects.filter>[0]
   expectTypeOf<FilterArg>().toMatchTypeOf<{

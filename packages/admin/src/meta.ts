@@ -44,6 +44,8 @@ export interface AdminFieldMeta {
   readonly required: boolean
   readonly hasDefault: boolean
   readonly maxLength?: number
+  /** Allowed values (`f.…().choices([...])`) — the UI renders selects. */
+  readonly choices?: readonly (string | number)[]
   readonly relation?: AdminRelationMeta
 }
 
@@ -135,6 +137,7 @@ function fieldMeta(
     ...(field.spec.maxLength === undefined
       ? {}
       : { maxLength: field.spec.maxLength }),
+    ...(field.spec.choices === undefined ? {} : { choices: field.spec.choices }),
     ...(field.spec.references === undefined
       ? {}
       : { relation: relationMeta(field, byTable) })

@@ -82,6 +82,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function expectedMessage(field: Field): string {
   const orNull = field.spec.nullable ? ' or null' : ''
+  if (field.spec.choices !== undefined) {
+    const rendered = field.spec.choices
+      .map((choice) => JSON.stringify(choice))
+      .join(', ')
+    return `Expected one of: ${rendered}${orNull}.`
+  }
   switch (field.spec.columnType) {
     case 'int':
     case 'float':
@@ -148,6 +154,12 @@ function normalizeDate(value: unknown): NormalizedValue {
 function normalizeValue(field: Field, value: unknown): NormalizedValue {
   if (value === null) {
     return field.spec.nullable ? { ok: true, value: null } : INVALID
+  }
+  if (
+    field.spec.choices !== undefined &&
+    !field.spec.choices.includes(value as string | number)
+  ) {
+    return INVALID
   }
   switch (field.spec.columnType) {
     case 'int':

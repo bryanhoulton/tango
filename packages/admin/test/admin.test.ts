@@ -19,6 +19,7 @@ const Post = model('posts', {
   id: f.int().primaryKey().autoIncrement(),
   title: f.varchar(255),
   body: f.text(),
+  status: f.varchar(20).choices(['draft', 'published']).default('draft'),
   published: f.boolean().default(false),
   authorId: f.foreignKey(() => Author, 'id', { dbConstraint: false }),
   createdAt: f.datetime().autoNowAdd()
@@ -118,6 +119,14 @@ describe('admin meta endpoint', () => {
       required: false,
       hasDefault: true
     })
+    // Choice fields surface their allowed values so the UI renders selects.
+    expect(byName.get('status')).toMatchObject({
+      type: 'varchar',
+      choices: ['draft', 'published'],
+      hasDefault: true
+    })
+    // Non-choice fields omit the key entirely.
+    expect(byName.get('title')?.choices).toBeUndefined()
   })
 
   it('resolves foreign keys to registered admin models', async () => {

@@ -120,6 +120,33 @@ describe('modelSerializer', () => {
     }
   })
 
+  it('validates values against choices', () => {
+    const Post = model('posts', {
+      id: f.int().primaryKey().autoIncrement(),
+      status: f.varchar(20).choices(['draft', 'published']).default('draft'),
+      priority: f.int().choices([1, 2, 3]).nullable()
+    })
+    const PostSerializer = modelSerializer(Post, {
+      fields: ['id', 'status', 'priority'] as const,
+      readOnlyFields: ['id'] as const
+    })
+
+    const valid = PostSerializer.forUnknownInput({ status: 'published', priority: 2 })
+    expect(valid.isValid()).toBe(true)
+    expect(valid.validatedData).toEqual({ status: 'published', priority: 2 })
+
+    const invalid = PostSerializer.forUnknownInput({ status: 'archived', priority: 9 })
+    expect(invalid.isValid()).toBe(false)
+    expect(invalid.errors).toEqual({
+      status: ['Expected one of: "draft", "published".'],
+      priority: ['Expected one of: 1, 2, 3 or null.']
+    })
+
+    // Nullable choice fields still accept null.
+    const nullable = PostSerializer.forUnknownInput({ status: 'draft', priority: null })
+    expect(nullable.isValid()).toBe(true)
+  })
+
   it('rejects unknown input fields', () => {
     const serializer = UserSerializer.forUnknownInput({
       email: 'ada@example.com',

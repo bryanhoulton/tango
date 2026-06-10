@@ -50,6 +50,20 @@ describe('buildSnapshot', () => {
     })
   })
 
+  it('ignores choices — they are validation metadata, not schema', () => {
+    const Plain = model('articles', {
+      id: f.int().primaryKey().autoIncrement(),
+      status: f.varchar(20)
+    })
+    const WithChoices = model('articles', {
+      id: f.int().primaryKey().autoIncrement(),
+      status: f.varchar(20).choices(['draft', 'published'])
+    })
+
+    // Adding choices to an existing column must not produce a migration.
+    expect(buildSnapshot([WithChoices])).toEqual(buildSnapshot([Plain]))
+  })
+
   it('captures foreign keys, except when dbConstraint is false', () => {
     const Post = model('posts', {
       id: f.int().primaryKey().autoIncrement(),
