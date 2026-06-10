@@ -7,7 +7,6 @@ import {
 } from '@tango-ts/server'
 
 import { app as coreApp } from './apps/core/app.js'
-import { routes as coreRoutes } from './apps/core/routes.js'
 import { routes } from './routes.js'
 
 export const project = defineProject({
@@ -17,7 +16,7 @@ export const project = defineProject({
   // calls this API from another origin.
   middleware: [requestLog(), securityHeaders()],
   routes,
-  apps: [{ path: '/core', app: coreApp, routes: coreRoutes }]
+  apps: [coreApp]
 })
 
 // Serves the generated schema at GET /openapi.json.

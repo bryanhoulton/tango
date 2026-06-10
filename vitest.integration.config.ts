@@ -10,6 +10,7 @@ export default defineConfig({
       '@tango-ts/cli': new URL('./packages/cli/src/index.ts', import.meta.url).pathname,
       '@tango-ts/contrib-auth': new URL('./packages/contrib-auth/src/index.ts', import.meta.url).pathname,
       '@tango-ts/core-types': new URL('./packages/core-types/src/index.ts', import.meta.url).pathname,
+      '@tango-ts/functions': new URL('./packages/functions/src/index.ts', import.meta.url).pathname,
       '@tango-ts/http': new URL('./packages/http/src/index.ts', import.meta.url).pathname,
       '@tango-ts/migrations': new URL('./packages/migrations/src/index.ts', import.meta.url).pathname,
       '@tango-ts/openapi': new URL('./packages/openapi/src/index.ts', import.meta.url).pathname,

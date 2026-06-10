@@ -7,6 +7,7 @@
     { "path": "./packages/auth/tsconfig.build.json" },
     { "path": "./packages/router/tsconfig.build.json" },
     { "path": "./packages/orm/tsconfig.build.json" },
+    { "path": "./packages/functions/tsconfig.build.json" },
     { "path": "./packages/serializers/tsconfig.build.json" },
     { "path": "./packages/migrations/tsconfig.build.json" },
     { "path": "./packages/server/tsconfig.build.json" },

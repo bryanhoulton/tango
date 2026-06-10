@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
+import { defineFunction, FUNCTIONS_PATH_PREFIX } from '@tango-ts/functions'
 import { f, model } from '@tango-ts/orm'
 import { createRouter } from '@tango-ts/router'
 import { modelSerializer } from '@tango-ts/serializers'
-import { defineProject } from '@tango-ts/server'
+import { defineApp, defineProject } from '@tango-ts/server'
 import { modelViewSet } from '@tango-ts/views'
 import { COMPILE_ONLY } from '@tango-ts/orm'
 
@@ -199,6 +200,31 @@ describe('generateOpenApi', () => {
 
     expect(schema.info).toEqual({ title: 'Commerce API', version: '0.0.0' })
     expect(schema.paths['/users/']?.get?.operationId).toBe('listUsers')
+  })
+
+  it('never emits the internal function dispatch endpoint', () => {
+    const work = defineFunction({
+      name: 'work',
+      handler: (p: null) => Promise.resolve(p)
+    })
+    const router = createRouter()
+    router.register('/users', modelViewSet({ model: User, serializer: UserSerializer }))
+    const project = defineProject({
+      name: 'Commerce API',
+      database: COMPILE_ONLY,
+      routes: router,
+      apps: [defineApp({ name: 'core', functions: [work] })],
+      // http transport mounts the dispatch route — the case that must stay
+      // invisible to the public API surface.
+      functions: { transport: 'http', secret: 's3cret', url: 'https://example.test' }
+    })
+
+    const schema = generateOpenApi(project)
+
+    expect(Object.keys(schema.paths)).toEqual(['/users/', '/users/{id}/'])
+    expect(
+      Object.keys(schema.paths).some((path) => path.startsWith(FUNCTIONS_PATH_PREFIX))
+    ).toBe(false)
   })
 })
 

@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@tango-ts/adapters": "^0.3.0",
+    "@tango-ts/functions": "^0.1.0",
     "@tango-ts/http": "^0.3.0",
     "@tango-ts/openapi": "^0.3.0",
     "@tango-ts/orm": "^0.3.0",
