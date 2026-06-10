@@ -36,14 +36,16 @@ jobs:
 
       - run: yarn install --frozen-lockfile
 
+      # Build first: typed linting resolves @tango-ts/* through each package's
+      # dist types for files outside the root project (e.g. the CLI template).
+      - name: Build packages
+        run: yarn build
+
       - name: Lint (includes no-restricted-imports guard)
         run: yarn lint
 
       - name: Manifest guard (no UI deps in server packages)
         run: yarn check:import-graph
-
-      - name: Build packages
-        run: yarn build
 
       - name: Bundle trace guard (@vercel/nft, forbidden files + size budget)
         run: yarn vitest run --config vitest.package.config.ts packages/adapters/test/vercel-bundle.package.ts
